@@ -1,0 +1,6 @@
+# LocalRun keeps its data in %APPDATA%\LocalRun, never in the repo - guard anyway.
+*.db
+*.db-wal
+*.db-shm
+*.log
+projects.json*

@@ -1,15 +1,18 @@
 # LocalRun - start every local project's run command with one click.
-# Project list is stored per machine in %APPDATA%\LocalRun\projects.json,
-# so this folder can be copied to another PC and keep its own list there.
+# Projects are stored per machine in a SQLite database, %APPDATA%\LocalRun\localrun.db,
+# outside the app folder - so this folder can be copied or cloned to another PC and
+# keep its own list there, and the data never goes into git.
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
 $AppDir     = $PSScriptRoot
 $LogoPath   = Join-Path $AppDir 'assets\logo.png'
-$ConfigDir  = Join-Path $env:APPDATA 'LocalRun'
-$ConfigFile = Join-Path $ConfigDir 'projects.json'
-$LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'
-$AppVersion = '1.0.0'
+$DataDir    = Join-Path $env:APPDATA 'LocalRun'
+$DbFile     = Join-Path $DataDir 'localrun.db'
+$LogFile    = Join-Path $DataDir 'localrun.log'
+$JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
+$LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
+$AppVersion = '1.1.0'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
@@ -27,9 +30,149 @@ $script:DeletingId  = $null
 $script:AllowMissing = $false
 $script:OverlayOpen = $false
 
-try {
-    Add-Type -Namespace LocalRun -Name Dwm -MemberDefinition '[DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);'
-} catch {}
+function Write-Log($msg) {
+    try {
+        if (-not (Test-Path -LiteralPath $DataDir)) { New-Item -ItemType Directory -Path $DataDir | Out-Null }
+        Add-Content -LiteralPath $LogFile -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $msg" -Encoding UTF8
+    } catch {}
+}
+
+# ---------------------------------------------------------------- native: window + SQLite
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
+namespace LocalRun {
+    public static class Native {
+        [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    }
+
+    public class SqliteException : Exception {
+        public SqliteException(string message) : base(message) {}
+    }
+
+    // Minimal wrapper over the SQLite that ships with Windows 10/11 (winsqlite3.dll).
+    // Every value is bound as text; that is all LocalRun stores.
+    public sealed class Db : IDisposable {
+        const string Lib = "winsqlite3.dll";
+        const int SQLITE_OK = 0, SQLITE_ROW = 100, SQLITE_DONE = 101;
+        static readonly IntPtr SQLITE_TRANSIENT = new IntPtr(-1);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        static extern int sqlite3_open16(string filename, out IntPtr db);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_close_v2(IntPtr db);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        static extern int sqlite3_prepare16_v2(IntPtr db, string sql, int nByte, out IntPtr stmt, IntPtr tail);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        static extern int sqlite3_bind_text16(IntPtr stmt, int index, string value, int nByte, IntPtr destructor);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_bind_null(IntPtr stmt, int index);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_step(IntPtr stmt);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_finalize(IntPtr stmt);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_column_count(IntPtr stmt);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern IntPtr sqlite3_column_text16(IntPtr stmt, int col);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern IntPtr sqlite3_errmsg16(IntPtr db);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_busy_timeout(IntPtr db, int ms);
+        [DllImport(Lib, CallingConvention = CallingConvention.StdCall)]
+        static extern int sqlite3_changes(IntPtr db);
+
+        IntPtr handle;
+
+        public Db(string path) {
+            if (sqlite3_open16(path, out handle) != SQLITE_OK) {
+                string message = LastError();
+                sqlite3_close_v2(handle);
+                handle = IntPtr.Zero;
+                throw new SqliteException("Cannot open " + path + ": " + message);
+            }
+            sqlite3_busy_timeout(handle, 5000);
+        }
+
+        string LastError() {
+            return handle == IntPtr.Zero ? "unknown error" : Marshal.PtrToStringUni(sqlite3_errmsg16(handle));
+        }
+
+        IntPtr Prepare(string sql, string[] args) {
+            IntPtr stmt;
+            if (sqlite3_prepare16_v2(handle, sql, -1, out stmt, IntPtr.Zero) != SQLITE_OK)
+                throw new SqliteException(LastError());
+            if (args != null) {
+                for (int i = 0; i < args.Length; i++) {
+                    int rc = args[i] == null
+                        ? sqlite3_bind_null(stmt, i + 1)
+                        : sqlite3_bind_text16(stmt, i + 1, args[i], -1, SQLITE_TRANSIENT);
+                    if (rc != SQLITE_OK) { sqlite3_finalize(stmt); throw new SqliteException(LastError()); }
+                }
+            }
+            return stmt;
+        }
+
+        // Runs a statement; returns the number of rows it changed.
+        public int Execute(string sql, string[] args) {
+            IntPtr stmt = Prepare(sql, args);
+            try {
+                int rc;
+                while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) { }
+                if (rc != SQLITE_DONE) throw new SqliteException(LastError());
+                return sqlite3_changes(handle);
+            } finally { sqlite3_finalize(stmt); }
+        }
+
+        public List<string[]> Query(string sql, string[] args) {
+            List<string[]> rows = new List<string[]>();
+            IntPtr stmt = Prepare(sql, args);
+            try {
+                int columns = sqlite3_column_count(stmt), rc;
+                while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+                    string[] row = new string[columns];
+                    for (int i = 0; i < columns; i++) {
+                        IntPtr text = sqlite3_column_text16(stmt, i);
+                        row[i] = text == IntPtr.Zero ? null : Marshal.PtrToStringUni(text);
+                    }
+                    rows.Add(row);
+                }
+                if (rc != SQLITE_DONE) throw new SqliteException(LastError());
+            } finally { sqlite3_finalize(stmt); }
+            return rows;
+        }
+
+        public string Scalar(string sql, string[] args) {
+            List<string[]> rows = Query(sql, args);
+            return rows.Count > 0 ? rows[0][0] : null;
+        }
+
+        public void Dispose() {
+            if (handle != IntPtr.Zero) { sqlite3_close_v2(handle); handle = IntPtr.Zero; }
+        }
+    }
+}
+'@
+
+# ---------------------------------------------------------------- single instance
+# Two open windows each hold their own list; one must never overwrite the other.
+# A second launch just brings the running window to the front.
+$createdNew = $false
+$script:InstanceMutex = [System.Threading.Mutex]::new($true, 'Local\Pigeonic.LocalRun', [ref]$createdNew)
+if (-not $createdNew) {
+    $other = Get-Process powershell -ErrorAction SilentlyContinue |
+        Where-Object { $_.Id -ne $PID -and $_.MainWindowTitle -eq 'LocalRun' } | Select-Object -First 1
+    if ($other) {
+        if ([LocalRun.Native]::IsIconic($other.MainWindowHandle)) { [void][LocalRun.Native]::ShowWindow($other.MainWindowHandle, 9) }
+        [void][LocalRun.Native]::SetForegroundWindow($other.MainWindowHandle)
+    }
+    exit
+}
 
 # ---------------------------------------------------------------- XAML
 $WindowXaml = @'
@@ -621,31 +764,93 @@ function Stop-Animation($Target, $Property, $Value) {
     $Target.SetValue($Property, [double]$Value)
 }
 
-# ---------------------------------------------------------------- data
-function Load-Projects {
-    $script:Projects.Clear()
-    $file = $ConfigFile
-    $migrating = $false
-    if (-not (Test-Path -LiteralPath $file) -and (Test-Path -LiteralPath $LegacyFile)) { $file = $LegacyFile; $migrating = $true }
-    if (-not (Test-Path -LiteralPath $file)) { return }
-    try {
-        $raw = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
-        if (-not $raw.Trim()) { return }
-        foreach ($p in (ConvertFrom-Json $raw)) {
-            $id = if ($p.Id) { [string]$p.Id } else { [guid]::NewGuid().ToString('N') }
-            [void]$script:Projects.Add([pscustomobject]@{ Id = $id; Title = [string]$p.Title; Path = [string]$p.Path })
+# ---------------------------------------------------------------- data (SQLite)
+# Every change writes only its own row; the list shown is always re-read from the database.
+$NoArgs = [string[]]@()
+
+function Open-Database {
+    if (-not (Test-Path -LiteralPath $DataDir)) { New-Item -ItemType Directory -Path $DataDir | Out-Null }
+    $script:Db = New-Object LocalRun.Db $DbFile
+    [void]$script:Db.Execute('PRAGMA journal_mode = WAL', $NoArgs)
+    [void]$script:Db.Execute('PRAGMA synchronous = FULL', $NoArgs)
+    [void]$script:Db.Execute(@'
+CREATE TABLE IF NOT EXISTS projects (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+)
+'@, $NoArgs)
+    [void]$script:Db.Execute('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)', $NoArgs)
+    [void]$script:Db.Execute('PRAGMA user_version = 1', $NoArgs)
+    Import-JsonProjects
+}
+
+# The winsqlite3.dll that ships with Windows is built with SQLITE_OMIT_LOCALTIME,
+# so datetime('now', 'localtime') is NULL there - timestamps come from PowerShell.
+function Get-Now { Get-Date -Format 'yyyy-MM-dd HH:mm:ss' }
+
+# One-time import of the JSON lists used before the database existed.
+# A JSON file is renamed to *.imported (kept as a backup) only after every project
+# in it is confirmed in the database; otherwise it is left untouched and retried next start.
+function Import-JsonProjects {
+    if ($script:Db.Scalar("SELECT value FROM meta WHERE key = 'json_imported'", $NoArgs)) { return }
+    $ErrorActionPreference = 'Stop'
+    $ok = $true
+    foreach ($file in $JsonFile, $LegacyFile) {
+        if (-not (Test-Path -LiteralPath $file)) { continue }
+        try {
+            $raw = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
+            $ids = @()
+            if ($raw.Trim()) {
+                foreach ($p in (ConvertFrom-Json $raw)) {
+                    $id = if ($p.Id) { [string]$p.Id } else { [guid]::NewGuid().ToString('N') }
+                    [void](Add-ProjectRow $id ([string]$p.Title) ([string]$p.Path) -IgnoreExisting)
+                    $ids += $id
+                }
+            }
+            $missing = @($ids | Where-Object { -not $script:Db.Scalar('SELECT id FROM projects WHERE id = ?1', [string[]]@($_)) })
+            if ($missing.Count -gt 0) { throw "$($missing.Count) of $($ids.Count) project(s) did not reach the database" }
+            Move-Item -LiteralPath $file -Destination "$file.imported" -Force
+            Write-Log "Imported $($ids.Count) project(s) from $file"
+        } catch {
+            $ok = $false
+            Write-Log "Import from $file failed, file left in place: $($_.Exception.Message)"
         }
-        if ($migrating) { Save-Projects }
-    } catch {
-        [System.Windows.MessageBox]::Show("Could not read the project list:`n$file`n`n$($_.Exception.Message)", 'LocalRun') | Out-Null
+    }
+    if ($ok) {
+        [void]$script:Db.Execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('json_imported', ?1)", [string[]]@((Get-Now)))
     }
 }
 
-function Save-Projects {
-    if (-not (Test-Path -LiteralPath $ConfigDir)) { New-Item -ItemType Directory -Path $ConfigDir | Out-Null }
-    $arr = @($script:Projects | ForEach-Object { [ordered]@{ Id = $_.Id; Title = $_.Title; Path = $_.Path } })
-    $json = if ($arr.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject $arr -Depth 3 }
-    [System.IO.File]::WriteAllText($ConfigFile, $json, (New-Object System.Text.UTF8Encoding $false))
+function Load-Projects {
+    $rows = $script:Db.Query('SELECT id, title, path FROM projects ORDER BY sort_order, created_at', $NoArgs)
+    $script:Projects.Clear()
+    foreach ($r in $rows) {
+        [void]$script:Projects.Add([pscustomobject]@{ Id = $r[0]; Title = $r[1]; Path = $r[2] })
+    }
+}
+
+function Add-ProjectRow($id, $title, $path, [switch]$IgnoreExisting) {
+    $verb = if ($IgnoreExisting) { 'INSERT OR IGNORE' } else { 'INSERT' }
+    $now = Get-Now
+    return $script:Db.Execute("$verb INTO projects (id, title, path, sort_order, created_at, updated_at) VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM projects), ?4, ?4)",
+        [string[]]@($id, $title, $path, $now))
+}
+
+function Update-ProjectRow($id, $title, $path) {
+    [void]$script:Db.Execute('UPDATE projects SET title = ?2, path = ?3, updated_at = ?4 WHERE id = ?1',
+        [string[]]@($id, $title, $path, (Get-Now)))
+}
+
+function Remove-ProjectRow($id) {
+    [void]$script:Db.Execute('DELETE FROM projects WHERE id = ?1', [string[]]@($id))
+}
+
+function Get-ListSignature {
+    return (@($script:Projects | ForEach-Object { "$($_.Id)|$($_.Title)|$($_.Path)" }) -join "`n")
 }
 
 function Get-Project($id) {
@@ -920,6 +1125,7 @@ function Show-Editor($p, $presetPath = '') {
 }
 
 function Save-Editor {
+    $ErrorActionPreference = 'Stop'
     $t = $TxtTitle.Text.Trim()
     $path = $TxtPath.Text.Trim().Trim('"')
     if (-not $t) { Show-DialogError 'Give the project a title.'; return }
@@ -929,18 +1135,22 @@ function Save-Editor {
         $script:AllowMissing = $true
         return
     }
-    if ($script:EditingId) {
-        $p = Get-Project $script:EditingId
-        $p.Title = $t
-        $p.Path = $path
-        $target = $p.Id
-        $msg = "Saved $t"
-    } else {
-        $target = [guid]::NewGuid().ToString('N')
-        [void]$script:Projects.Add([pscustomobject]@{ Id = $target; Title = $t; Path = $path })
-        $msg = "Added $t"
+    try {
+        if ($script:EditingId) {
+            $target = $script:EditingId
+            Update-ProjectRow $target $t $path
+            $msg = "Saved $t"
+        } else {
+            $target = [guid]::NewGuid().ToString('N')
+            [void](Add-ProjectRow $target $t $path)
+            $msg = "Added $t"
+        }
+        Load-Projects
+    } catch {
+        Write-Log "Save failed for '$t': $($_.Exception.Message)"
+        Show-DialogError "Could not save: $($_.Exception.Message)"
+        return
     }
-    Save-Projects
     Close-Overlay
     Render-Cards $target
     Show-Toast $msg
@@ -961,13 +1171,19 @@ function Confirm-Delete {
     Animate $s $P_SX 0.85 200 -Ease $EaseOut
     Animate $s $P_SY 0.85 200 -Ease $EaseOut
     Animate $c.Root $P_Opacity 0 200 -OnDone {
+        $ErrorActionPreference = 'Stop'
         $p = Get-Project $script:DeletingId
         if ($p) {
-            [void]$script:Projects.Remove($p)
-            $script:Running.Remove($p.Id)
-            Save-Projects
+            try {
+                Remove-ProjectRow $p.Id
+                Load-Projects
+                $script:Running.Remove($p.Id)
+                Show-Toast "Removed $($p.Title)" 'info'
+            } catch {
+                Write-Log "Remove failed for '$($p.Title)': $($_.Exception.Message)"
+                Show-Toast "Could not remove $($p.Title)" 'error'
+            }
             Render-Cards
-            Show-Toast "Removed $($p.Title)" 'info'
         }
         $script:DeletingId = $null
     }
@@ -1071,9 +1287,9 @@ $window.Add_SourceInitialized({
     try {
         $h = (New-Object System.Windows.Interop.WindowInteropHelper $window).Handle
         $round = 2          # DWMWA_WINDOW_CORNER_PREFERENCE = round (Windows 11)
-        [void][LocalRun.Dwm]::DwmSetWindowAttribute($h, 33, [ref]$round, 4)
+        [void][LocalRun.Native]::DwmSetWindowAttribute($h, 33, [ref]$round, 4)
         $border = 0x0054262B  # DWMWA_BORDER_COLOR, 0x00BBGGRR for #2B2654
-        [void][LocalRun.Dwm]::DwmSetWindowAttribute($h, 34, [ref]$border, 4)
+        [void][LocalRun.Native]::DwmSetWindowAttribute($h, 34, [ref]$border, 4)
     } catch {}
 })
 
@@ -1088,7 +1304,29 @@ $window.Add_Loaded({
     $procTimer.Start()
 })
 
-$window.Add_Closed({ $procTimer.Stop(); $script:ToastTimer.Stop() })
+# Coming back to the window re-reads the database and re-checks which command files exist.
+$window.Add_Activated({
+    if ($script:OverlayOpen -or -not $window.IsLoaded) { return }
+    $before = Get-ListSignature
+    try { Load-Projects } catch { Write-Log "Reload failed: $($_.Exception.Message)"; return }
+    if ((Get-ListSignature) -ne $before) { Render-Cards }
+    else { foreach ($p in $script:Projects) { Set-CardState $p.Id } }
+})
 
-Load-Projects
+$window.Add_Closed({
+    $procTimer.Stop()
+    $script:ToastTimer.Stop()
+    if ($script:Db) { $script:Db.Dispose() }
+    $script:InstanceMutex.ReleaseMutex()
+})
+
+try {
+    Open-Database
+    Load-Projects
+    Write-Log "Started v$AppVersion - $($script:Projects.Count) project(s) loaded from $DbFile"
+} catch {
+    Write-Log "Startup failed: $($_.Exception.Message)"
+    [System.Windows.MessageBox]::Show("LocalRun could not open its database:`n$DbFile`n`n$($_.Exception.Message)`n`nDetails are in $LogFile", 'LocalRun') | Out-Null
+    exit 1
+}
 [void]$window.ShowDialog()
