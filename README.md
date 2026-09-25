@@ -30,7 +30,7 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 
 ## Getting started
 1. Double-click `LocalRun.vbs`. On PCs that block `.vbs` files, use `LocalRun.bat`.
-2. Optional: right-click `Install.ps1` → **Run with PowerShell** to add Desktop and Start Menu shortcuts with the LocalRun icon.
+2. Optional: right-click `Install.ps1` → **Run with PowerShell** to add Desktop and Start Menu shortcuts with the LocalRun icon. The shortcuts carry the same taskbar ID as the app, so a pinned LocalRun groups with the running window. Run it again after updating from a version before 1.1.1.
 
 On a new PC, just clone this repository (or copy the folder) and do the same.
 
@@ -55,6 +55,7 @@ On a new PC, just clone this repository (or copy the folder) and do the same.
 | Timing | `DispatcherTimer` | Watching launched processes, hiding toasts |
 | Database | **SQLite 3** through Windows' own `winsqlite3.dll`, via a small C# P/Invoke wrapper (`LocalRun.Db`) | The per-machine project list: WAL journal, `synchronous = FULL`, parameterised statements |
 | Single instance | Named `System.Threading.Mutex` (`Local\Pigeonic.LocalRun`) | A second launch focuses the open window instead of opening another |
+| Taskbar identity | `SetCurrentProcessExplicitAppUserModelID` (`Pigeonic.LocalRun`) + `PKEY_AppUserModel_ID` on the shortcuts (`IPropertyStore`) | LocalRun gets its own taskbar button and icon instead of grouping under PowerShell |
 | Logging | Plain text log (`localrun.log`) | Startup, import and database errors |
 | Process control | `Start-Process -PassThru`, `cmd.exe /k`, `powershell.exe -NoExit`, `taskkill /T /F` | Running and stopping projects |
 | Launcher | **VBScript** (`WScript.Shell.Run`, window style 0) | Starting the app with no console window |
@@ -201,6 +202,7 @@ Consoles stay open (`/k`, `-NoExit`) so logs remain visible and `Ctrl+C` still w
 - **Per-machine data outside the app folder.** The app is portable and shareable through git, while each PC keeps its own project list.
 - **SQLite through `winsqlite3.dll` rather than System.Data.SQLite.** Windows 10 and 11 already ship SQLite, so a ~150-line P/Invoke wrapper replaces a NuGet package and its native DLLs. The zero-install promise holds.
 - **SQLite instead of the v1.0 JSON file.** The JSON file was rewritten in full on every save, so a window holding a stale or empty list could overwrite good data. Row-level writes plus a single instance close that hole.
+- **Own taskbar identity.** LocalRun runs inside `powershell.exe`, so without an explicit AppUserModelID Windows groups its window under PowerShell and shows the PowerShell icon. The app sets `Pigeonic.LocalRun` before its window exists, and `Install.ps1` stamps the same ID on the shortcuts.
 - **Script files are ASCII-only.** Windows PowerShell 5.1 reads BOM-less scripts in the system code page, so non-ASCII UI glyphs are written as XAML entities (`&#xE768;`) or `[char]` codes. Project titles in any language, such as Bangla, are stored as UTF-16 text in SQLite and display correctly.
 
 ## Limitations

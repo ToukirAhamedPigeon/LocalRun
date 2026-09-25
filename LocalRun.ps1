@@ -7,12 +7,14 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
 $AppDir     = $PSScriptRoot
 $LogoPath   = Join-Path $AppDir 'assets\logo.png'
+$IconPath   = Join-Path $AppDir 'assets\localrun.ico'
+$AppId      = 'Pigeonic.LocalRun'    # taskbar identity; Install.ps1 stamps the same ID on the shortcuts
 $DataDir    = Join-Path $env:APPDATA 'LocalRun'
 $DbFile     = Join-Path $DataDir 'localrun.db'
 $LogFile    = Join-Path $DataDir 'localrun.log'
 $JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
-$AppVersion = '1.1.0'
+$AppVersion = '1.1.1'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
@@ -46,6 +48,9 @@ using System.Runtime.InteropServices;
 namespace LocalRun {
     public static class Native {
         [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        // Without an explicit AppUserModelID the taskbar groups this window under
+        // powershell.exe and shows PowerShell's icon instead of LocalRun's.
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
@@ -173,6 +178,9 @@ if (-not $createdNew) {
     }
     exit
 }
+
+# Must be set before any window exists, or the taskbar has already grouped us under powershell.exe.
+[void][LocalRun.Native]::SetCurrentProcessExplicitAppUserModelID($AppId)
 
 # ---------------------------------------------------------------- XAML
 $WindowXaml = @'
@@ -889,6 +897,10 @@ if (Test-Path -LiteralPath $LogoPath) {
         $InfoLogoFallback.Visibility = 'Collapsed'
         $window.Icon = $bmp
     } catch {}
+}
+# The multi-size .ico gives the taskbar and Alt+Tab a crisp icon at every size.
+if (Test-Path -LiteralPath $IconPath) {
+    try { $window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create((New-Object System.Uri $IconPath)) } catch {}
 }
 
 # ---------------------------------------------------------------- toast
