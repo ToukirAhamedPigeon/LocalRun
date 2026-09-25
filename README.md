@@ -29,10 +29,29 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 - No install and no dependencies: it runs on Windows PowerShell 5.1 and WPF, which are built into Windows.
 
 ## Getting started
-1. Double-click `LocalRun.vbs`. On PCs that block `.vbs` files, use `LocalRun.bat`.
-2. Optional: right-click `Install.ps1` → **Run with PowerShell** to add Desktop and Start Menu shortcuts with the LocalRun icon. The shortcuts carry the same taskbar ID as the app, so a pinned LocalRun groups with the running window. Run it again after updating from a version before 1.1.1.
 
-On a new PC, just clone this repository (or copy the folder) and do the same.
+### Install (recommended)
+1. Download **`LocalRun-Setup-<version>.exe`** from the [latest release](https://github.com/ToukirAhamedPigeon/LocalRun/releases/latest).
+2. Run it and follow the wizard: Welcome → **Terms and Conditions** (you must accept them) → install folder and shortcuts → Install → Finish.
+3. Start LocalRun from the Desktop or the Start menu.
+
+- Installs per user to `%LOCALAPPDATA%\Programs\LocalRun`. **No administrator rights needed.**
+- Running the setup of a newer version updates an existing install in place. Your saved projects are never touched.
+- Uninstall from **Settings → Apps → Installed apps → LocalRun**. You choose whether to keep your saved projects.
+- Unattended install: `LocalRun-Setup-<version>.exe -Quiet [-InstallDir <folder>]`. Using `-Quiet` means you accept the [Terms](TERMS.md).
+
+> **"Windows protected your PC"?** The installer is not code-signed, so Microsoft Defender SmartScreen warns about it the first time. Click **More info → Run anyway**.
+
+### Portable (no install)
+1. Download **`LocalRun-<version>.zip`** from the release, or clone this repository.
+2. Double-click `LocalRun.vbs`. On PCs that block `.vbs` files, use `LocalRun.bat`.
+3. Optional: right-click `Install.ps1` → **Run with PowerShell** to add Desktop and Start Menu shortcuts with the LocalRun icon. The shortcuts carry the same taskbar ID as the app, so a pinned LocalRun groups with the running window. Run it again after updating from a version before 1.1.1.
+
+### Building the release files
+```powershell
+powershell -ExecutionPolicy Bypass -File installer\build.ps1
+```
+This writes `dist\LocalRun-Setup-<version>.exe` and `dist\LocalRun-<version>.zip`. The version comes from `$AppVersion` in `LocalRun.ps1`. The build needs nothing beyond Windows itself: it compiles the small setup `.exe` with the .NET Framework `csc.exe` that ships with Windows.
 
 | Shortcut | Action |
 |---|---|
@@ -101,12 +120,29 @@ LocalRun/
 ├── LocalRun.ps1        # the application (UI, data, process control)
 ├── LocalRun.vbs        # hidden-window launcher (normal entry point)
 ├── LocalRun.bat        # fallback launcher where .vbs is blocked
-├── Install.ps1         # creates Desktop + Start Menu shortcuts on this PC
-├── .gitignore          # guards against database / log files ever being committed
-└── assets/
-    ├── logo.png        # app logo (title bar, empty state, window icon)
-    └── localrun.ico    # multi-size icon for shortcuts
+├── Install.ps1         # portable use: creates Desktop + Start Menu shortcuts on this PC
+├── TERMS.md            # Terms and Conditions, shown and accepted in the installer
+├── .gitignore          # guards against database / log / build files ever being committed
+├── assets/
+│   ├── logo.png        # app logo (title bar, empty state, window icon)
+│   └── localrun.ico    # multi-size icon for shortcuts and the setup .exe
+└── installer/
+    ├── setup.ps1       # the setup wizard (WPF): terms, options, install, register uninstaller
+    ├── Bootstrap.cs    # LocalRun-Setup.exe: embeds setup.ps1 + payload.zip, runs the wizard
+    ├── Uninstall.ps1   # removes the app, its shortcuts and its Apps entry; optionally the data
+    ├── Uninstall.vbs   # what Windows runs from Settings > Apps (runs Uninstall.ps1 from %TEMP%)
+    └── build.ps1       # builds dist\LocalRun-Setup-<version>.exe and the portable zip
 ```
+
+### Installer
+`LocalRun-Setup-<version>.exe` is a ~250 KB .NET Framework program compiled by `build.ps1`. It carries `setup.ps1` and a `payload.zip` of the app as embedded resources. When run, it extracts them to a temp folder, starts the wizard with a hidden console, and deletes the temp folder afterwards.
+
+The wizard:
+1. Copies the app to the chosen folder (default `%LOCALAPPDATA%\Programs\LocalRun`). It refuses if LocalRun is running from that folder.
+2. Creates the Desktop and Start Menu shortcuts, stamped with the `Pigeonic.LocalRun` taskbar ID.
+3. Registers LocalRun under `HKCU\...\Uninstall\Pigeonic.LocalRun` with its name, version, publisher, icon, size and uninstall command.
+
+The uninstaller only deletes a folder that contains `LocalRun.ps1` and `Uninstall.vbs`. It only removes the shortcuts Setup recorded, and only if they still point into that folder.
 
 ### Data model
 Stored per machine in **`%APPDATA%\LocalRun\localrun.db`**, outside the app folder. So the data never goes into git, and the same folder or git clone carries a different list on each PC.
