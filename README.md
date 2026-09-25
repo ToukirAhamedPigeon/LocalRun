@@ -25,6 +25,7 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 - **Run** opens the command in its own console window, started from the project's folder.
 - A running project glows and shows **Stop**, which closes the console and every process it started.
 - Missing command files are flagged, so the same app works across several PCs.
+- Footer with copyright, social links and an **About** dialog (version, developer, company). Links open in the browser; no URL is shown in the app.
 - No install and no dependencies: it runs on Windows PowerShell 5.1 and WPF, which are built into Windows.
 
 ## Getting started
@@ -165,6 +166,7 @@ Consoles stay open (`/k`, `-NoExit`) so logs remain visible and `Ctrl+C` still w
 | cards | `New-Card`, `Render-Cards`, `Set-CardState`, `Update-Counts` |
 | run / stop | `Start-Project`, `Stop-Project`, process-watcher timer |
 | dialogs | `Open-Overlay`, `Close-Overlay`, `Show-Editor`, `Save-Editor`, `Show-DeleteConfirm`, `Confirm-Delete` |
+| about + links | `Open-Link`, copyright year, social icon and About dialog wiring (`$Links`, `$AppVersion`) |
 | wiring | button, keyboard, drag-and-drop and window events; DWM styling; startup animations |
 
 ---

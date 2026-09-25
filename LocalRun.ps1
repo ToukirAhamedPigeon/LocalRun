@@ -9,6 +9,15 @@ $LogoPath   = Join-Path $AppDir 'assets\logo.png'
 $ConfigDir  = Join-Path $env:APPDATA 'LocalRun'
 $ConfigFile = Join-Path $ConfigDir 'projects.json'
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'
+$AppVersion = '1.0.0'
+
+# Opened from the icons only - no URL is ever shown in the UI.
+$Links = @{
+    LinkedIn = 'https://www.linkedin.com/in/toukir-ahamed-09477b28a/'
+    Facebook = 'https://www.facebook.com/ta.pigeon'
+    Mail     = 'https://mail.google.com/mail/?view=cm&fs=1&to=toukir.ahamed.pigeon@gmail.com'
+    Web      = 'https://pigeonic.com'
+}
 
 $script:Projects    = New-Object System.Collections.ArrayList
 $script:Running     = @{}   # project Id -> launched console process
@@ -231,6 +240,60 @@ $WindowXaml = @'
       <Setter Property="Margin" Value="0,0,0,7"/>
     </Style>
 
+    <!-- round social icon; BorderBrush carries the brand colour shown on hover -->
+    <Style x:Key="SocialBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#B9B3E0"/>
+      <Setter Property="Width" Value="32"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Margin" Value="6,0,0,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="B" Background="#14FFFFFF" CornerRadius="16" RenderTransformOrigin="0.5,0.5">
+              <Border.RenderTransform><ScaleTransform x:Name="S"/></Border.RenderTransform>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="B" Property="Background" Value="{Binding BorderBrush, RelativeSource={RelativeSource TemplatedParent}}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="S" Storyboard.TargetProperty="ScaleX" To="1.14" Duration="0:0:0.15"/>
+                      <DoubleAnimation Storyboard.TargetName="S" Storyboard.TargetProperty="ScaleY" To="1.14" Duration="0:0:0.15"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="S" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.2"/>
+                      <DoubleAnimation Storyboard.TargetName="S" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.2"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Link" TargetType="Hyperlink">
+      <Setter Property="Foreground" Value="#FF9A6B"/>
+      <Setter Property="TextDecorations" Value="{x:Null}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Foreground" Value="#FFB547"/>
+          <Setter Property="TextDecorations" Value="Underline"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
     <Style TargetType="ScrollBar">
       <Setter Property="Width" Value="8"/>
       <Setter Property="Template">
@@ -256,10 +319,11 @@ $WindowXaml = @'
       <RowDefinition Height="56"/>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
     <!-- slow-moving colour glows behind everything -->
-    <Grid Grid.RowSpan="3" IsHitTestVisible="False">
+    <Grid Grid.RowSpan="4" IsHitTestVisible="False">
       <Ellipse x:Name="Blob1" Width="640" Height="640" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-300,-200,0">
         <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#50FF5E62" Offset="0"/><GradientStop Color="#00FF5E62" Offset="1"/></RadialGradientBrush></Ellipse.Fill>
         <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
@@ -338,8 +402,36 @@ $WindowXaml = @'
       </StackPanel>
     </Border>
 
+    <!-- footer -->
+    <Border Grid.Row="3" BorderBrush="#1AFFFFFF" BorderThickness="0,1,0,0" Background="#40080618" Padding="30,10,24,10">
+      <Grid>
+        <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#7D77A6">
+          <Run x:Name="FooterCopy" Text="&#xA9; 2026"/>
+          <Hyperlink x:Name="LnkFooterCompany" Style="{StaticResource Link}">Pigeonic</Hyperlink><Run Text=". All rights reserved.   &#xB7;   Developed by "/><Hyperlink x:Name="LnkFooterDev" Style="{StaticResource Link}">Pigeonic</Hyperlink>
+        </TextBlock>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+          <Button x:Name="FLinkedIn" Style="{StaticResource SocialBtn}" BorderBrush="#0A66C2" ToolTip="LinkedIn">
+            <TextBlock Text="in" FontFamily="Segoe UI" FontWeight="Bold" FontSize="13" Margin="0,-2,0,0"/>
+          </Button>
+          <Button x:Name="FFacebook" Style="{StaticResource SocialBtn}" BorderBrush="#1877F2" ToolTip="Facebook">
+            <TextBlock Text="f" FontFamily="Segoe UI" FontWeight="Bold" FontSize="16" Margin="0,-1,0,0"/>
+          </Button>
+          <Button x:Name="FMail" Style="{StaticResource SocialBtn}" BorderBrush="#EA4335" ToolTip="Email">
+            <TextBlock Text="&#xE715;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+          </Button>
+          <Button x:Name="FWeb" Style="{StaticResource SocialBtn}" BorderBrush="#FF5E62" ToolTip="Website">
+            <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+          </Button>
+          <Border Width="1" Height="18" Background="#26FFFFFF" Margin="12,0,6,0"/>
+          <Button x:Name="BtnInfo" Style="{StaticResource SocialBtn}" BorderBrush="{StaticResource Flame}" ToolTip="About LocalRun">
+            <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
     <!-- dialogs -->
-    <Grid x:Name="Overlay" Grid.RowSpan="3" Background="#CC07061A" Visibility="Collapsed" Opacity="0">
+    <Grid x:Name="Overlay" Grid.RowSpan="4" Background="#CC07061A" Visibility="Collapsed" Opacity="0">
       <Border x:Name="Dialog" Width="540" Background="#1A1636" CornerRadius="20" Padding="30,28" BorderBrush="#30FFFFFF" BorderThickness="1"
               HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
         <Border.RenderTransform><ScaleTransform ScaleX="0.94" ScaleY="0.94"/></Border.RenderTransform>
@@ -376,12 +468,61 @@ $WindowXaml = @'
               <Button x:Name="BtnConfirmYes" Style="{StaticResource DangerBtn}" Content="Remove" Margin="10,0,0,0"/>
             </StackPanel>
           </StackPanel>
+
+          <StackPanel x:Name="InfoPanel" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+              <Grid Width="68" Height="68">
+                <Grid.Effect><DropShadowEffect Color="#FF5E62" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/></Grid.Effect>
+                <Border x:Name="InfoLogoFallback" CornerRadius="18" Background="{StaticResource Flame}">
+                  <TextBlock Text="L" FontWeight="Bold" FontSize="34" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Image x:Name="InfoLogo" RenderOptions.BitmapScalingMode="HighQuality"/>
+              </Grid>
+              <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
+                <TextBlock FontSize="26" FontWeight="Bold"><Run Text="Local"/><Run Text="Run" Foreground="{StaticResource Flame}"/></TextBlock>
+                <TextBlock x:Name="InfoVersion" FontSize="13" Foreground="#8F89B8" Margin="0,2,0,0"/>
+              </StackPanel>
+            </StackPanel>
+            <TextBlock Text="Start every local project, with all its dependencies, in one click." Foreground="#B9B3E0" FontSize="14" Margin="0,20,0,18" TextWrapping="Wrap"/>
+            <Border Background="#10FFFFFF" CornerRadius="12" Padding="18,14">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock Text="DEVELOPER" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="Toukir Ahamed Pigeon" FontSize="14" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="1" Text="COMPANY" Style="{StaticResource FieldLabel}" Margin="0,12,0,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" FontSize="14" FontWeight="SemiBold" Margin="0,12,0,0">
+                  <Hyperlink x:Name="LnkInfoCompany" Style="{StaticResource Link}">Pigeonic</Hyperlink>
+                </TextBlock>
+                <TextBlock Grid.Row="2" Text="PLATFORM" Style="{StaticResource FieldLabel}" Margin="0,12,0,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="Windows 10 / 11   &#xB7;   PowerShell 5.1 + WPF" FontSize="13" Foreground="#B9B3E0" Margin="0,12,0,0"/>
+              </Grid>
+            </Border>
+            <Grid Margin="0,22,0,0">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="ILinkedIn" Style="{StaticResource SocialBtn}" BorderBrush="#0A66C2" ToolTip="LinkedIn" Margin="0">
+                  <TextBlock Text="in" FontFamily="Segoe UI" FontWeight="Bold" FontSize="13" Margin="0,-2,0,0"/>
+                </Button>
+                <Button x:Name="IFacebook" Style="{StaticResource SocialBtn}" BorderBrush="#1877F2" ToolTip="Facebook">
+                  <TextBlock Text="f" FontFamily="Segoe UI" FontWeight="Bold" FontSize="16" Margin="0,-1,0,0"/>
+                </Button>
+                <Button x:Name="IMail" Style="{StaticResource SocialBtn}" BorderBrush="#EA4335" ToolTip="Email">
+                  <TextBlock Text="&#xE715;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                </Button>
+                <Button x:Name="IWeb" Style="{StaticResource SocialBtn}" BorderBrush="#FF5E62" ToolTip="Website">
+                  <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                </Button>
+              </StackPanel>
+              <Button x:Name="BtnInfoClose" Style="{StaticResource GhostBtn}" Content="Close" HorizontalAlignment="Right"/>
+            </Grid>
+            <TextBlock x:Name="InfoCopy" FontSize="11.5" Foreground="#6E6A8F" Margin="0,18,0,0"/>
+          </StackPanel>
         </Grid>
       </Border>
     </Grid>
 
     <!-- toast -->
-    <Border x:Name="Toast" Grid.RowSpan="3" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,26"
+    <Border x:Name="Toast" Grid.RowSpan="4" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,72"
             Padding="16,11" CornerRadius="12" Background="#F2221D45" BorderBrush="#33FFFFFF" BorderThickness="1"
             Opacity="0" IsHitTestVisible="False">
       <Border.RenderTransform><TranslateTransform Y="20"/></Border.RenderTransform>
@@ -522,7 +663,8 @@ foreach ($n in 'Root','Blob1','Blob2','Blob3','HeaderLogo','HeaderLogoFallback',
                'CountText','BtnNew','Scroller','CardList','EmptyState','EmptyArt','EmptyLogo','EmptyLogoFallback',
                'BtnEmptyAdd','DropHint','Overlay','Dialog','EditPanel','DialogTitle','TxtTitle','TxtPath','BtnBrowse',
                'DialogError','BtnCancel','BtnSave','ConfirmPanel','ConfirmText','BtnConfirmNo','BtnConfirmYes',
-               'Toast','ToastDot','ToastText') {
+               'Toast','ToastDot','ToastText','FooterCopy','BtnInfo','InfoPanel','InfoLogo','InfoLogoFallback',
+               'InfoVersion','InfoCopy','BtnInfoClose') {
     Set-Variable -Name $n -Value $window.FindName($n) -Scope Script
 }
 $FlameBrush = $window.FindResource('Flame')
@@ -538,6 +680,8 @@ if (Test-Path -LiteralPath $LogoPath) {
         $EmptyLogo.Source = $bmp
         $HeaderLogoFallback.Visibility = 'Collapsed'
         $EmptyLogoFallback.Visibility = 'Collapsed'
+        $InfoLogo.Source = $bmp
+        $InfoLogoFallback.Visibility = 'Collapsed'
         $window.Icon = $bmp
     } catch {}
 }
@@ -741,6 +885,7 @@ $procTimer.Add_Tick({
 function Open-Overlay($panel) {
     $EditPanel.Visibility = 'Collapsed'
     $ConfirmPanel.Visibility = 'Collapsed'
+    $InfoPanel.Visibility = 'Collapsed'
     $panel.Visibility = 'Visible'
     $script:OverlayOpen = $true
     $Overlay.Visibility = 'Visible'
@@ -835,6 +980,32 @@ $BtnCancel.Add_Click({ Close-Overlay })
 $BtnSave.Add_Click({ Save-Editor })
 $BtnConfirmNo.Add_Click({ Close-Overlay })
 $BtnConfirmYes.Add_Click({ Confirm-Delete })
+
+# ---------------------------------------------------------------- about + links
+function Open-Link($url) {
+    try { Start-Process $url } catch { Show-Toast 'Could not open the browser.' 'error' }
+}
+
+$year = (Get-Date).Year
+$span = if ($year -gt 2026) { "2026$([char]0x2013)$year" } else { '2026' }
+$FooterCopy.Text = "$([char]0x00A9) $span"
+$InfoCopy.Text = "$([char]0x00A9) $span Pigeonic. All rights reserved."
+$InfoVersion.Text = "Version $AppVersion"
+
+foreach ($prefix in 'F', 'I') {
+    foreach ($k in 'LinkedIn', 'Facebook', 'Mail', 'Web') {
+        $b = $window.FindName("$prefix$k")
+        $b.Tag = $Links[$k]
+        $b.Add_Click({ Open-Link $this.Tag })
+    }
+}
+foreach ($n in 'LnkFooterCompany', 'LnkFooterDev', 'LnkInfoCompany') {
+    $h = $window.FindName($n)
+    $h.Tag = $Links.Web
+    $h.Add_Click({ Open-Link $this.Tag })
+}
+$BtnInfo.Add_Click({ Open-Overlay $InfoPanel })
+$BtnInfoClose.Add_Click({ Close-Overlay })
 $Overlay.Add_MouseLeftButtonDown({ param($s, $e) if ($e.OriginalSource -eq $Overlay) { Close-Overlay } })
 $TxtPath.Add_TextChanged({ $script:AllowMissing = $false; $DialogError.Visibility = 'Collapsed' })
 $TxtTitle.Add_TextChanged({ $DialogError.Visibility = 'Collapsed' })
@@ -869,7 +1040,9 @@ $window.Add_PreviewKeyDown({
     if ($script:OverlayOpen) {
         if ($e.Key -eq 'Escape') { Close-Overlay; $e.Handled = $true }
         elseif ($e.Key -eq 'Return') {
-            if ($EditPanel.Visibility -eq 'Visible') { Save-Editor } else { Confirm-Delete }
+            if ($EditPanel.Visibility -eq 'Visible') { Save-Editor }
+            elseif ($ConfirmPanel.Visibility -eq 'Visible') { Confirm-Delete }
+            else { Close-Overlay }
             $e.Handled = $true
         }
     } elseif ($e.Key -eq 'N' -and [System.Windows.Input.Keyboard]::Modifiers -eq 'Control') {
