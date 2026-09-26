@@ -30,7 +30,8 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 ## Features
 - ⭐ **Recipes (`local-run/startapp.json` in each app folder):** describe how a project starts (checks, setup steps, services, readiness, profiles) and LocalRun runs it. It starts services in order, waits until each one is ready, keeps a log per service, and stops everything cleanly. Any stack: PHP, Python, Node, .NET, Java, Docker, Android. See [Recipes](#recipes).
 - A **Recipe guide** inside the app, with the full rules, 12 ready-made templates, *Save into an app folder*, and a *Copy AI prompt* button, so an AI assistant can write the recipe for you.
-- Add, edit and remove projects (title + recipe or command file). You can also drag a file onto the window to add it.
+- **Recipes and command files side by side:** a project can use a `.json` recipe or a `.bat` / `.cmd` / `.ps1` script. Paste or drop an app folder and LocalRun finds `local-run/startapp.json` (or `startapp.ps1` / `.bat` / `.cmd`). Files in `local-run/` run from the app folder.
+- Add, edit and remove projects (title + recipe or command file). You can also drag a file or an app folder onto the window to add it.
 - **Run** opens the command in its own console window, started from the project's folder.
 - A running project glows and shows **Stop**, which closes the console and every process it started.
 - Missing command files are flagged, so the same app works across several PCs.

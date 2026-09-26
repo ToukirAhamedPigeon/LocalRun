@@ -18,7 +18,28 @@ my-app/
 - Add the project in LocalRun with **New project → Browse**, and choose `local-run/startapp.json`. You can also paste or drop the **app folder** itself: LocalRun finds `local-run/startapp.json` inside it.
 - **Relative paths start from the app folder** (the folder that contains `local-run`), not from `local-run` itself. So `"cwd": "backend"` means `my-app/backend`.
 - The recipe is versioned with the app, so everyone on the team runs the app the same way.
-- Existing `.bat`, `.cmd` and `.ps1` files still work as before.
+- Command files are supported too, see below.
+
+## Recipe or command file: both work
+
+| | Recipe (`.json`) | Command file (`.bat`, `.cmd`, `.ps1`) |
+|---|---|---|
+| What it is | Facts: checks, setup, services, readiness | Your own script, run as it is |
+| How LocalRun runs it | Hidden processes, in order, each one ready before the next, a log per service | In a visible console window titled with the project name |
+| Stop | Stops everything the run started (not shared services it found running) | Ends the console and every process it started |
+| Logs, profiles, Retry | Yes | The console window shows the output |
+| In `local-run/` | `startapp.json` | `startapp.ps1`, `startapp.bat` or `startapp.cmd` |
+
+Both can live anywhere, under any name. When you give LocalRun an **app folder**, it looks in `local-run/` for, in this order, `startapp.json`, `startapp.ps1`, `startapp.bat`, `startapp.cmd`. A file in `local-run/`, recipe or script, **runs from the app folder**.
+
+A recipe can also **call an existing script** when one step is easier to keep as a script:
+```json
+{
+  "name": "legacy worker",
+  "run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-worker.ps1",
+  "port": 9100
+}
+```
 
 ## Write it human-readable
 

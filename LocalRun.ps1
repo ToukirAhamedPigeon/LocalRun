@@ -14,7 +14,7 @@ $DbFile     = Join-Path $DataDir 'localrun.db'
 $LogFile    = Join-Path $DataDir 'localrun.log'
 $JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
-$AppVersion = '1.2.1'
+$AppVersion = '1.2.2'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
@@ -1209,17 +1209,20 @@ function New-Card($p, $index) {
     $c.Tile.Background = New-Object System.Windows.Media.LinearGradientBrush ((Get-Color $pal[0]), (Get-Color $pal[1]), 45.0)
     $c.Initial.Text = if ($p.Title) { [System.Globalization.StringInfo]::GetNextTextElement($p.Title).ToUpper() } else { '?' }
     $c.TitleText.Text = $p.Title
-    $c.FileText.Text = [System.IO.Path]::GetFileName($p.Path)
-    try { $c.DirText.Text = Split-Path -Parent $p.Path } catch { $c.DirText.Text = '' }
+    # Recipes and command files alike: a file in <app>\local-run shows as local-run/<file>,
+    # with the app folder (where it runs) underneath.
+    $fileName = [System.IO.Path]::GetFileName($p.Path)
+    $inFolder = $false
+    try { $inFolder = (Split-Path -Leaf (Split-Path -Parent $p.Path)) -eq $script:RecipeFolder } catch {}
+    $c.FileText.Text = if ($inFolder) { "$($script:RecipeFolder)/$fileName" } else { $fileName }
+    try { $c.DirText.Text = Get-RecipeRoot $p.Path } catch { $c.DirText.Text = '' }
     $card.ToolTip = $p.Path
     $card.Tag = $p.Id
     foreach ($b in $c.RunBtn, $c.ProfileBtn, $c.LogsBtn, $c.EditBtn, $c.DelBtn) { $b.Tag = $p.Id }
 
     if (Test-IsRecipe $p) {
         $c.LogsBtn.Visibility = 'Visible'
-        $inFolder = (Split-Path -Leaf (Split-Path -Parent $p.Path)) -eq $script:RecipeFolder
-        $c.FileText.Text = $(if ($inFolder) { "$($script:RecipeFolder)/$([System.IO.Path]::GetFileName($p.Path))" } else { [System.IO.Path]::GetFileName($p.Path) }) + '  -  recipe'
-        $c.DirText.Text = Get-RecipeRoot $p.Path
+        $c.FileText.Text += '  -  recipe'
         $read = Read-Recipe $p.Path
         if ($read.Recipe -and (Get-RecipeProfiles $read.Recipe).Count -gt 0) { $c.ProfileBtn.Visibility = 'Visible' }
     }
@@ -1323,7 +1326,8 @@ function Start-Project($p, [string]$profile = '') {
         $procTimer.Stop(); $procTimer.Start()   # first tick soon, not in half a second
         return
     }
-    $dir = Split-Path -Parent $p.Path
+    # A command file kept in <app>\local-run runs from the app folder, like a recipe does.
+    $dir = Get-RecipeRoot $p.Path
     $ext = [System.IO.Path]::GetExtension($p.Path).ToLower()
     $safeTitle = $p.Title -replace '[&|<>^"%]', ''
     try {
@@ -1600,7 +1604,7 @@ function Save-Editor {
     $t = $TxtTitle.Text.Trim()
     $path = Resolve-RecipeInput $TxtPath.Text.Trim().Trim('"').TrimEnd('\', '/')
     if (Test-Path -LiteralPath $path -PathType Container) {
-        Show-DialogError "This folder has no $($script:RecipeFolder)\$($script:RecipeFile). Create one from the Recipe guide, or choose a .bat, .cmd or .ps1."
+        Show-DialogError "This folder has no $($script:RecipeFolder)\startapp.json (or startapp.ps1 / .bat / .cmd). Create a recipe from the Recipe guide, or choose any .json, .bat, .cmd or .ps1 file."
         return
     }
     $TxtPath.Text = $path
@@ -1819,7 +1823,7 @@ $window.Add_Drop({
     # A dropped app folder means its local-run\startapp.json.
     $target = Resolve-RecipeInput $files[0]
     if (Test-Path -LiteralPath $target -PathType Leaf) { Show-Editor $null $target }
-    else { Show-Toast "No $($script:RecipeFolder)\$($script:RecipeFile) in that folder" 'error' }
+    else { Show-Toast "No $($script:RecipeFolder)\startapp.json or startapp.ps1 / .bat / .cmd in that folder" 'error' }
 })
 
 $window.Add_SourceInitialized({

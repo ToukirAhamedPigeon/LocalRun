@@ -271,11 +271,17 @@ function Get-RecipeRoot([string]$recipePath) {
     return $dir
 }
 
-# A folder given instead of a file resolves to its local-run\startapp.json, when there is one.
+# What LocalRun looks for inside <app>\local-run, in this order: the recipe first, then a
+# plain command file for apps that keep a start script instead.
+$script:StartFiles = @('startapp.json', 'startapp.ps1', 'startapp.bat', 'startapp.cmd')
+
+# A folder given instead of a file resolves to the first start file in its local-run folder.
 function Resolve-RecipeInput([string]$path) {
     if ($path -and (Test-Path -LiteralPath $path -PathType Container)) {
-        $candidate = Join-Path $path (Join-Path $script:RecipeFolder $script:RecipeFile)
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+        foreach ($name in $script:StartFiles) {
+            $candidate = Join-Path $path (Join-Path $script:RecipeFolder $name)
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+        }
     }
     return $path
 }
