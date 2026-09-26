@@ -14,7 +14,7 @@ $DbFile     = Join-Path $DataDir 'localrun.db'
 $LogFile    = Join-Path $DataDir 'localrun.log'
 $JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
-$AppVersion = '1.1.1'
+$AppVersion = '1.1.2'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
