@@ -22,6 +22,7 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 - [Limitations](#limitations)
 - [Privacy](#privacy)
 - [Code signing policy](#code-signing-policy)
+- [Roadmap](#roadmap)
 - [License](#license)
 
 ---
@@ -276,6 +277,9 @@ Release binaries (`LocalRun-Setup-<version>.exe`) are built from this repository
 | Approvers | [Toukir Ahamed Pigeon](https://github.com/ToukirAhamedPigeon) |
 
 All team members use multi-factor authentication for GitHub and SignPath.
+
+## Roadmap
+**One click, any stack.** Today each project needs its own start script. The plan is to replace those scripts with a short per-project *recipe*, run by a shared engine inside LocalRun. Recipes would be drafted by built-in detectors and a small, free, fine-tuned local model, with the whole install kept under 500 MB. See [docs/engine-plan.md](docs/engine-plan.md). Status: proposal.
 
 ## License
 LocalRun is free and open-source software, released under the [MIT License](LICENSE).
