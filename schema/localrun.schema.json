@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
+  "title": "LocalRun recipe (localrun.json)",
+  "description": "How LocalRun starts a project: checks, setup steps and services. See docs/recipe-format.md.",
+  "type": "object",
+  "required": ["services"],
+  "additionalProperties": false,
+  "definitions": {
+    "env": {
+      "type": "object",
+      "description": "Environment variables. Values may use ${ROOT}, ${LAN_IP}, ${PROFILE}, ${env:NAME}.",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "shell": { "type": "string", "enum": ["cmd", "powershell"], "default": "cmd", "description": "cmd (default) or powershell." },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "when": {
+      "type": "object",
+      "description": "Condition: every listed key must hold.",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": "string", "description": "True when the run uses this profile." },
+        "notProfile": { "type": "string", "description": "True when the run does not use this profile." },
+        "exists": { "type": "string", "description": "True when this path exists (wildcards allowed)." },
+        "missing": { "type": "string", "description": "True when this path does not exist." },
+        "newer": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2, "description": "[a, b]: true when a is newer than b, or b does not exist." },
+        "portFree": { "$ref": "#/definitions/port" },
+        "portBusy": { "$ref": "#/definitions/port" },
+        "any": { "type": "array", "items": { "$ref": "#/definitions/when" }, "description": "At least one of these conditions must hold." }
+      }
+    },
+    "ready": {
+      "type": "object",
+      "description": "How LocalRun knows the service is ready. Use one kind.",
+      "additionalProperties": false,
+      "properties": {
+        "port": { "$ref": "#/definitions/port", "description": "Ready when this port is listening." },
+        "url": { "type": "string", "description": "Ready when this URL answers with a status below 400." },
+        "status": { "type": "array", "items": { "type": "integer" }, "description": "Accepted HTTP status codes for url." },
+        "log": { "type": "string", "description": "Ready when the service output matches this regular expression." },
+        "command": { "type": "string", "description": "Ready when this command's output matches 'match' (or it exits 0). Retried every 2 s." },
+        "match": { "type": "string", "description": "Regular expression for command." },
+        "delay": { "type": "number", "minimum": 0, "description": "Ready after this many seconds." },
+        "exit": { "type": "boolean", "description": "A one-off task: ready when the command exits with code 0. Runs after the services listed before it (e.g. migrations after the database)." },
+        "timeout": { "type": "number", "minimum": 1, "default": 60, "description": "Seconds to wait before failing." }
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["name", "run"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "Unique service name." },
+        "description": { "type": "string" },
+        "run": { "type": "string", "description": "The long-running command, as typed in a terminal." },
+        "cwd": { "type": "string", "description": "Working folder, relative to root." },
+        "env": { "$ref": "#/definitions/env" },
+        "shell": { "$ref": "#/definitions/shell" },
+        "port": { "$ref": "#/definitions/port", "description": "The port it listens on (readiness, clash detection, clean stop)." },
+        "shared": { "type": "boolean", "description": "Shared infrastructure: if the port is already listening, use it and never stop it. Needs port." },
+        "ready": { "$ref": "#/definitions/ready" },
+        "stop": { "type": "string", "description": "Command run on Stop before the process is ended, e.g. docker compose down." },
+        "when": { "$ref": "#/definitions/when" }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["run"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "run": { "type": "string", "description": "One-off command that must exit with code 0." },
+        "cwd": { "type": "string" },
+        "env": { "$ref": "#/definitions/env" },
+        "shell": { "$ref": "#/definitions/shell" },
+        "when": { "$ref": "#/definitions/when" },
+        "timeout": { "type": "number", "minimum": 1, "default": 900 }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "exists": { "type": "string", "description": "A path that must exist." },
+        "command": { "type": "string", "description": "A quick command; passes if output matches 'match', or exits 0." },
+        "match": { "type": "string" },
+        "portFree": { "$ref": "#/definitions/port", "description": "This port must not be in use." },
+        "portBusy": { "$ref": "#/definitions/port", "description": "Something must already listen on this port." },
+        "fix": { "type": "string", "description": "What to do when the check fails." },
+        "warn": { "type": "boolean", "description": "Only warn; do not stop the run." },
+        "when": { "$ref": "#/definitions/when" }
+      },
+      "anyOf": [ { "required": ["exists"] }, { "required": ["command"] }, { "required": ["portFree"] }, { "required": ["portBusy"] } ]
+    },
+    "open": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          { "type": "string" },
+          { "type": "object", "required": ["url"], "additionalProperties": false,
+            "properties": { "url": { "type": "string" }, "when": { "$ref": "#/definitions/when" } } }
+        ]
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "description": "Project name." },
+    "description": { "type": "string" },
+    "root": { "type": "string", "description": "Folder relative paths start from. Default: the recipe's folder." },
+    "path": { "type": "array", "items": { "type": "string" }, "description": "Folders put in front of PATH. Wildcards pick the highest match." },
+    "env": { "$ref": "#/definitions/env" },
+    "profiles": {
+      "type": "object",
+      "description": "Named modes, e.g. lan, seed.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": { "type": "string" },
+          "env": { "$ref": "#/definitions/env" },
+          "open": { "$ref": "#/definitions/open" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "checks": { "type": "array", "items": { "$ref": "#/definitions/check" } },
+    "setup": { "type": "array", "items": { "$ref": "#/definitions/step" } },
+    "services": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/service" } },
+    "open": { "$ref": "#/definitions/open" },
+    "message": { "type": "string", "description": "Shown when everything is ready." }
+  }
+}

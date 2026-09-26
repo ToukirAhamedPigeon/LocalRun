@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
+  "name": "Two projects started together",
+  "description": "Keep this recipe in the folder that contains both projects. Shared services start once and are never stopped if they were already running.",
+  "path": ["C:/laragon/bin/php/php-8.2*", "C:/laragon/bin/mysql/mysql-8*/bin"],
+  "services": [
+    { "name": "mysql", "run": "mysqld --console", "port": 3306, "shared": true, "ready": { "port": 3306, "timeout": 90 } },
+    { "name": "project-a", "cwd": "project-a", "run": "php artisan serve --port 8001", "port": 8001 },
+    { "name": "project-b", "cwd": "project-b", "run": "php artisan serve --port 8002", "port": 8002 }
+  ],
+  "open": ["http://127.0.0.1:8001", "http://127.0.0.1:8002"]
+}

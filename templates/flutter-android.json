@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
+  "name": "Flutter app on an Android emulator",
+  "checks": [
+    { "name": "Flutter SDK", "command": "flutter --version", "fix": "Install Flutter and add it to PATH" },
+    { "name": "Android emulator", "command": "emulator -list-avds", "match": "\\w", "fix": "Create an emulator in Android Studio > Device Manager, then put its name below" }
+  ],
+  "setup": [
+    { "name": "flutter pub get", "run": "flutter pub get", "when": { "missing": ".dart_tool" } }
+  ],
+  "services": [
+    { "name": "emulator", "run": "emulator -avd Pixel_7_API_34 -no-snapshot-save",
+      "ready": { "command": "adb shell getprop sys.boot_completed", "match": "1", "timeout": 240 } },
+    { "name": "app", "run": "flutter run -d emulator-5554",
+      "ready": { "log": "Flutter run key commands|A Dart VM Service", "timeout": 600 } }
+  ],
+  "message": "iOS simulators need macOS. On Windows, run Android, or the web target: flutter run -d chrome"
+}

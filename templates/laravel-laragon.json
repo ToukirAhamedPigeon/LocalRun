@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
+  "name": "Laravel on Laragon",
+  "path": ["C:/laragon/bin/php/php-8.2*", "C:/laragon/bin/mysql/mysql-8*/bin"],
+  "env": { "BIND": "127.0.0.1" },
+  "checks": [
+    { "name": "PHP 8.2", "command": "php -v", "match": "PHP 8\\.2", "fix": "Add PHP 8.2 in Laragon (Menu > PHP > Version), or change the path above" },
+    { "exists": ".env", "fix": "copy .env.example .env, then php artisan key:generate" }
+  ],
+  "setup": [
+    { "name": "composer install", "run": "composer install --no-interaction",
+      "when": { "any": [ { "missing": "vendor/autoload.php" }, { "newer": ["composer.lock", "vendor/composer/installed.json"] } ] } },
+    { "name": "npm ci", "run": "npm ci", "when": { "missing": "node_modules" } },
+    { "name": "storage link", "run": "php artisan storage:link", "when": { "missing": "public/storage" } }
+  ],
+  "services": [
+    { "name": "mysql", "run": "mysqld --console", "port": 3306, "shared": true, "ready": { "port": 3306, "timeout": 90 } },
+    { "name": "migrate", "run": "php artisan migrate --force", "ready": { "exit": true } },
+    { "name": "app", "run": "php artisan serve --host %BIND% --port 8000", "port": 8000 },
+    { "name": "vite", "run": "npm run dev", "port": 5173 }
+  ],
+  "profiles": {
+    "lan": { "description": "Open it from a phone on the same Wi-Fi",
+             "env": { "BIND": "0.0.0.0" },
+             "message": "On your phone open http://${LAN_IP}:8000" }
+  },
+  "open": ["http://127.0.0.1:8000"]
+}

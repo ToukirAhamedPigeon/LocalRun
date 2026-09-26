@@ -17,6 +17,16 @@ if ((Get-Content -LiteralPath (Join-Path $Root 'LocalRun.ps1') -Raw) -notmatch '
 $Version = $Matches[1]
 $FileVersion = (($Version -split '\.') + @('0', '0', '0', '0'))[0..3] -join '.'
 
+# The recipe engine, its rules (shown in the in-app guide), the JSON schema and the templates.
+function Copy-RecipeFiles($dest) {
+    Copy-Item -LiteralPath (Join-Path $Root 'engine.ps1') -Destination $dest
+    New-Item -ItemType Directory -Path (Join-Path $dest 'docs') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $Root 'docs\recipe-format.md') -Destination (Join-Path $dest 'docs')
+    foreach ($dir in 'schema', 'templates') {
+        Copy-Item -LiteralPath (Join-Path $Root $dir) -Destination $dest -Recurse
+    }
+}
+
 if (Test-Path -LiteralPath $Work) { Remove-Item -LiteralPath $Work -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $Work 'payload\assets') -Force | Out-Null
 
@@ -36,6 +46,7 @@ $files = @{
 foreach ($src in $files.Keys) {
     Copy-Item -LiteralPath (Join-Path $Root $src) -Destination (Join-Path $Work "payload\$($files[$src])")
 }
+Copy-RecipeFiles (Join-Path $Work 'payload')
 $payloadZip = Join-Path $Work 'payload.zip'
 [System.IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $Work 'payload'), $payloadZip, 'Optimal', $false)
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'setup.ps1') -Destination (Join-Path $Work 'setup.ps1')
@@ -62,6 +73,7 @@ New-Item -ItemType Directory -Path (Join-Path $portable 'assets') -Force | Out-N
 foreach ($f in 'LocalRun.ps1', 'LocalRun.vbs', 'LocalRun.bat', 'Install.ps1', 'README.md', 'TERMS.md', 'LICENSE', 'assets\logo.png', 'assets\localrun.ico') {
     Copy-Item -LiteralPath (Join-Path $Root $f) -Destination (Join-Path $portable $f)
 }
+Copy-RecipeFiles $portable
 [System.IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $Work 'portable'), $zip, 'Optimal', $false)
 
 Remove-Item -LiteralPath $Work -Recurse -Force

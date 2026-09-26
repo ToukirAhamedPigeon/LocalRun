@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
+  "name": "Full stack: FastAPI + Vite + Redis",
+  "env": { "BIND": "127.0.0.1" },
+  "checks": [
+    { "exists": ".venv/Scripts/python.exe", "fix": "py -3.11 -m venv .venv, then .venv\\Scripts\\pip install -r backend\\requirements.txt" },
+    { "exists": "backend/.env", "fix": "Copy backend\\.env.example to backend\\.env" },
+    { "exists": "frontend/node_modules", "fix": "cd frontend, then npm ci" }
+  ],
+  "services": [
+    { "name": "redis", "run": "redis-server --port 6379", "port": 6379, "shared": true },
+    { "name": "api", "cwd": "backend",
+      "run": "..\\.venv\\Scripts\\python -m uvicorn app.main:app --host %BIND% --port 8000 --reload",
+      "port": 8000, "ready": { "url": "http://127.0.0.1:8000/docs", "timeout": 90 } },
+    { "name": "web", "cwd": "frontend", "run": "npm run dev -- --host %BIND% --port 5173 --strictPort", "port": 5173 }
+  ],
+  "profiles": {
+    "lan": { "description": "Open it from a phone on the same Wi-Fi",
+             "env": { "BIND": "0.0.0.0" },
+             "message": "On your phone open http://${LAN_IP}:5173" }
+  },
+  "open": ["http://localhost:5173"]
+}

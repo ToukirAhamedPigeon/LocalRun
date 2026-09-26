@@ -14,7 +14,7 @@ $DbFile     = Join-Path $DataDir 'localrun.db'
 $LogFile    = Join-Path $DataDir 'localrun.log'
 $JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
-$AppVersion = '1.1.2'
+$AppVersion = '1.2.0'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
@@ -32,6 +32,9 @@ $script:EditingId   = $null
 $script:DeletingId  = $null
 $script:AllowMissing = $false
 $script:OverlayOpen = $false
+$script:Runs        = @{}   # project Id -> recipe run (engine.ps1)
+$script:NoticeAction = $null
+$script:LogsFiles   = @()
 
 function Write-Log($msg) {
     try {
@@ -39,6 +42,9 @@ function Write-Log($msg) {
         Add-Content -LiteralPath $LogFile -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $msg" -Encoding UTF8
     } catch {}
 }
+
+# Recipe engine (localrun.json): checks, setup, services, readiness, logs, stop.
+. (Join-Path $AppDir 'engine.ps1')
 
 # ---------------------------------------------------------------- native: window + SQLite
 Add-Type -TypeDefinition @'
@@ -434,6 +440,85 @@ $WindowXaml = @'
       </Setter>
     </Style>
 
+    <Style x:Key="NavList" TargetType="ListBox">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+    </Style>
+    <Style x:Key="NavItem" TargetType="ListBoxItem">
+      <Setter Property="Foreground" Value="#B9B3E0"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="B" Background="Transparent" CornerRadius="9" Padding="12,8" Margin="0,0,6,4">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="Background" Value="#14FFFFFF"/></Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="B" Property="Background" Value="#33FF7A59"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CodeBox" TargetType="TextBox">
+      <Setter Property="Foreground" Value="#E4E0FF"/>
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="IsReadOnly" Value="True"/>
+      <Setter Property="AcceptsReturn" Value="True"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+      <Setter Property="SelectionBrush" Value="#FF5E62"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border Background="#0FFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="12" Padding="4">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="10,8,4,8"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="DarkMenu" TargetType="ContextMenu">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ContextMenu">
+            <Border Background="#231E47" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="10" Padding="6">
+              <StackPanel IsItemsHost="True"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="DarkMenuItem" TargetType="MenuItem">
+      <Setter Property="Foreground" Value="#F4F1FF"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="MenuItem">
+            <Border x:Name="B" Background="Transparent" CornerRadius="7" Padding="12,8" MinWidth="200">
+              <StackPanel>
+                <ContentPresenter ContentSource="Header"/>
+                <TextBlock Text="{TemplateBinding ToolTip}" FontSize="11.5" Foreground="#9D97C4" TextWrapping="Wrap" MaxWidth="260"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="B" Property="Background" Value="#33FF7A59"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <Style x:Key="Link" TargetType="Hyperlink">
       <Setter Property="Foreground" Value="#FF9A6B"/>
       <Setter Property="TextDecorations" Value="{x:Null}"/>
@@ -515,12 +600,20 @@ $WindowXaml = @'
         <TextBlock Text="Your projects" FontSize="28" FontWeight="SemiBold"/>
         <TextBlock x:Name="CountText" FontSize="13" Foreground="#8F89B8" Margin="0,4,0,0"/>
       </StackPanel>
-      <Button x:Name="BtnNew" Style="{StaticResource FlameBtn}" HorizontalAlignment="Right" VerticalAlignment="Center">
-        <StackPanel Orientation="Horizontal">
-          <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
-          <TextBlock Text="New project" Margin="8,0,0,0" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <Button x:Name="BtnGuide" Style="{StaticResource GhostBtn}" ToolTip="How to write a localrun.json recipe">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE897;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+            <TextBlock Text="Recipe guide" Margin="8,0,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+        <Button x:Name="BtnNew" Style="{StaticResource FlameBtn}" Margin="10,0,0,0">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
+            <TextBlock Text="New project" Margin="8,0,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+      </StackPanel>
     </Grid>
 
     <!-- project cards -->
@@ -591,10 +684,15 @@ $WindowXaml = @'
         <Grid>
           <StackPanel x:Name="EditPanel">
             <TextBlock x:Name="DialogTitle" Text="New project" FontSize="21" FontWeight="SemiBold"/>
-            <TextBlock Text="Point LocalRun at the .bat, .cmd or .ps1 that starts this project." Foreground="#8F89B8" FontSize="13" Margin="0,5,0,22" TextWrapping="Wrap"/>
+            <TextBlock Text="Point LocalRun at the project's localrun.json recipe, or at a .bat, .cmd or .ps1 that starts it." Foreground="#8F89B8" FontSize="13" Margin="0,5,0,22" TextWrapping="Wrap"/>
             <TextBlock Text="PROJECT TITLE" Style="{StaticResource FieldLabel}"/>
             <TextBox x:Name="TxtTitle" Style="{StaticResource Field}"/>
-            <TextBlock Text="COMMAND FILE" Style="{StaticResource FieldLabel}" Margin="0,16,0,7"/>
+            <Grid Margin="0,16,0,7">
+              <TextBlock Text="RECIPE OR COMMAND FILE" Style="{StaticResource FieldLabel}" Margin="0"/>
+              <TextBlock HorizontalAlignment="Right" FontSize="12">
+                <Hyperlink x:Name="LnkEditorGuide" Style="{StaticResource Link}">How do I write a recipe?</Hyperlink>
+              </TextBlock>
+            </Grid>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <TextBox x:Name="TxtPath" Style="{StaticResource Field}" FontFamily="Cascadia Mono, Consolas" FontSize="13"/>
@@ -673,6 +771,75 @@ $WindowXaml = @'
             </Grid>
             <TextBlock x:Name="InfoCopy" FontSize="11.5" Foreground="#6E6A8F" Margin="0,18,0,0"/>
           </StackPanel>
+
+          <!-- recipe guide -->
+          <Grid x:Name="GuidePanel" Visibility="Collapsed" Height="560">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock Text="Recipe guide" FontSize="21" FontWeight="SemiBold"/>
+              <TextBlock Foreground="#8F89B8" FontSize="13" Margin="0,5,0,16" TextWrapping="Wrap"
+                         Text="Describe how a project starts in a localrun.json file: checks, setup and services. LocalRun runs it, waits for each service, keeps the logs and stops everything cleanly."/>
+            </StackPanel>
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <ListBox x:Name="GuideList" Style="{StaticResource NavList}" ItemContainerStyle="{StaticResource NavItem}"/>
+              <Grid Grid.Column="1" Margin="18,0,0,0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <TextBlock x:Name="GuideTitle" FontSize="16" FontWeight="SemiBold"/>
+                <TextBlock x:Name="GuideDesc" Grid.Row="1" Foreground="#B9B3E0" FontSize="13" Margin="0,4,0,10" TextWrapping="Wrap"/>
+                <TextBox x:Name="GuideCode" Grid.Row="2" Style="{StaticResource CodeBox}"/>
+              </Grid>
+            </Grid>
+            <Grid Grid.Row="2" Margin="0,16,0,0">
+              <Button x:Name="BtnCopyPrompt" Style="{StaticResource GhostBtn}" HorizontalAlignment="Left" ToolTip="Copies the recipe rules as a prompt for any AI assistant">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+                  <TextBlock Text="Copy AI prompt" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnGuideCopy" Style="{StaticResource GhostBtn}" Content="Copy"/>
+                <Button x:Name="BtnGuideCreate" Style="{StaticResource FlameBtn}" Content="Save as localrun.json..." Margin="10,0,0,0"/>
+                <Button x:Name="BtnGuideClose" Style="{StaticResource GhostBtn}" Content="Close" Margin="10,0,0,0"/>
+              </StackPanel>
+            </Grid>
+          </Grid>
+
+          <!-- logs -->
+          <Grid x:Name="LogsPanel" Visibility="Collapsed" Height="560">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel Margin="0,0,0,16">
+              <TextBlock x:Name="LogsTitle" FontSize="21" FontWeight="SemiBold"/>
+              <TextBlock x:Name="LogsStatus" Foreground="#8F89B8" FontSize="13" Margin="0,5,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <ListBox x:Name="LogsList" Style="{StaticResource NavList}" ItemContainerStyle="{StaticResource NavItem}"/>
+              <TextBox x:Name="LogsText" Grid.Column="1" Margin="18,0,0,0" Style="{StaticResource CodeBox}"/>
+            </Grid>
+            <Grid Grid.Row="2" Margin="0,16,0,0">
+              <Button x:Name="BtnLogsFolder" Style="{StaticResource GhostBtn}" HorizontalAlignment="Left" Content="Open log folder"/>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnLogsCopy" Style="{StaticResource GhostBtn}" Content="Copy"/>
+                <Button x:Name="BtnLogsClose" Style="{StaticResource FlameBtn}" Content="Close" Margin="10,0,0,0"/>
+              </StackPanel>
+            </Grid>
+          </Grid>
+
+          <!-- notice: failures, ready messages, recipe errors -->
+          <StackPanel x:Name="NoticePanel" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+              <Border x:Name="NoticeBadge" Width="34" Height="34" CornerRadius="17" VerticalAlignment="Center">
+                <TextBlock x:Name="NoticeGlyph" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+              <TextBlock x:Name="NoticeTitle" FontSize="20" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="560"/>
+            </StackPanel>
+            <TextBox x:Name="NoticeText" Style="{StaticResource CodeBox}" Margin="0,16,0,0" MaxHeight="320" MinHeight="60" TextWrapping="Wrap" FontFamily="Segoe UI" FontSize="13.5"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+              <Button x:Name="BtnNoticeAction" Style="{StaticResource GhostBtn}"/>
+              <Button x:Name="BtnNoticeClose" Style="{StaticResource FlameBtn}" Content="Close" Margin="10,0,0,0"/>
+            </StackPanel>
+          </StackPanel>
         </Grid>
       </Border>
     </Grid>
@@ -695,7 +862,7 @@ $WindowXaml = @'
 $CardXaml = @'
 <Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Width="300" Height="178" Margin="0,0,18,18" CornerRadius="18" Padding="18,16"
+        Width="320" Height="178" Margin="0,0,18,18" CornerRadius="18" Padding="18,16"
         Background="#171433" BorderBrush="#2B2654" BorderThickness="1" RenderTransformOrigin="0.5,0.5" Opacity="0">
   <Border.RenderTransform>
     <TransformGroup><ScaleTransform/><TranslateTransform Y="18"/></TransformGroup>
@@ -712,7 +879,7 @@ $CardXaml = @'
         <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" Foreground="#F4F1FF" TextTrimming="CharacterEllipsis"/>
         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
           <Ellipse x:Name="Dot" Width="8" Height="8" Fill="#6E6A8F" VerticalAlignment="Center"/>
-          <TextBlock x:Name="StatusText" Margin="6,0,0,0" FontSize="12" Foreground="#8F89B8" Text="Ready"/>
+          <TextBlock x:Name="StatusText" Margin="6,0,0,0" FontSize="12" Foreground="#8F89B8" Text="Ready" TextTrimming="CharacterEllipsis" MaxWidth="215"/>
         </StackPanel>
       </StackPanel>
     </Grid>
@@ -721,15 +888,19 @@ $CardXaml = @'
       <TextBlock x:Name="DirText" FontSize="11.5" Foreground="#7D77A6" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
     </StackPanel>
     <Grid Grid.Row="2">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <Button x:Name="RunBtn" Style="{DynamicResource FlameBtn}" Height="36">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+      <Button x:Name="RunBtn" Style="{DynamicResource FlameBtn}" Height="36" Padding="12,0">
         <StackPanel Orientation="Horizontal">
           <TextBlock x:Name="RunGlyph" Text="&#xE768;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
           <TextBlock x:Name="RunText" Text="Run" Margin="8,0,0,0" VerticalAlignment="Center"/>
         </StackPanel>
       </Button>
-      <Button x:Name="EditBtn" Grid.Column="1" Style="{DynamicResource IconBtn}" Content="&#xE70F;" Margin="8,0,0,0" ToolTip="Edit"/>
-      <Button x:Name="DelBtn" Grid.Column="2" Style="{DynamicResource DangerIconBtn}" Content="&#xE74D;" Margin="8,0,0,0" ToolTip="Remove"/>
+      <Button x:Name="ProfileBtn" Grid.Column="1" Style="{DynamicResource IconBtn}" Content="&#xE70D;" Width="30" Margin="6,0,0,0" ToolTip="Run with a profile" Visibility="Collapsed"/>
+      <Button x:Name="LogsBtn" Grid.Column="2" Style="{DynamicResource IconBtn}" Content="&#xE8A5;" Margin="6,0,0,0" ToolTip="Logs" Visibility="Collapsed"/>
+      <Button x:Name="EditBtn" Grid.Column="3" Style="{DynamicResource IconBtn}" Content="&#xE70F;" Margin="6,0,0,0" ToolTip="Edit"/>
+      <Button x:Name="DelBtn" Grid.Column="4" Style="{DynamicResource DangerIconBtn}" Content="&#xE74D;" Margin="6,0,0,0" ToolTip="Remove"/>
     </Grid>
   </Grid>
 </Border>
@@ -882,7 +1053,10 @@ foreach ($n in 'Root','Blob1','Blob2','Blob3','HeaderLogo','HeaderLogoFallback',
                'BtnEmptyAdd','DropHint','Overlay','Dialog','EditPanel','DialogTitle','TxtTitle','TxtPath','BtnBrowse',
                'DialogError','BtnCancel','BtnSave','ConfirmPanel','ConfirmText','BtnConfirmNo','BtnConfirmYes',
                'Toast','ToastDot','ToastText','FooterCopy','BtnInfo','InfoPanel','InfoLogo','InfoLogoFallback',
-               'InfoVersion','InfoCopy','BtnInfoClose') {
+               'InfoVersion','InfoCopy','BtnInfoClose','BtnGuide','LnkEditorGuide','GuidePanel','GuideList','GuideTitle',
+               'GuideDesc','GuideCode','BtnCopyPrompt','BtnGuideCopy','BtnGuideCreate','BtnGuideClose','LogsPanel','LogsTitle',
+               'LogsStatus','LogsList','LogsText','BtnLogsFolder','BtnLogsCopy','BtnLogsClose','NoticePanel','NoticeBadge',
+               'NoticeGlyph','NoticeTitle','NoticeText','BtnNoticeAction','BtnNoticeClose') {
     Set-Variable -Name $n -Value $window.FindName($n) -Scope Script
 }
 $FlameBrush = $window.FindResource('Flame')
@@ -919,6 +1093,9 @@ $script:ToastTimer.Add_Tick({
 
 function Show-Toast($text, $kind = 'ok') {
     $ToastText.Text = $text
+    # Over a dialog the toast moves to the top, so it never covers the dialog's buttons.
+    $Toast.VerticalAlignment = if ($script:OverlayOpen) { 'Top' } else { 'Bottom' }
+    $Toast.Margin = New-Object System.Windows.Thickness 0, $(if ($script:OverlayOpen) { 18 } else { 0 }), 0, $(if ($script:OverlayOpen) { 0 } else { 72 })
     $ToastDot.Fill = Get-Brush $(switch ($kind) { 'error' { '#FF6B81' } 'info' { '#FFB547' } default { '#3DDC97' } })
     Animate $Toast $P_Opacity 1 200
     Animate $Toast.RenderTransform $P_Y 0 320 -From 20 -Ease $EaseBack
@@ -927,25 +1104,55 @@ function Show-Toast($text, $kind = 'ok') {
 }
 
 # ---------------------------------------------------------------- cards
+function Test-IsRecipe($p) {
+    return $p -and $p.Path -and ([System.IO.Path]::GetExtension($p.Path).ToLower() -eq '.json')
+}
+
+# Active = a script console is open, or a recipe run is checking, setting up, starting or running.
+function Test-ProjectActive($id) {
+    return $script:Running.ContainsKey($id) -or (Test-RunActive $script:Runs[$id])
+}
+
 function Set-CardState($id) {
     $c = $script:Cards[$id]
     $p = Get-Project $id
     if (-not $c -or -not $p) { return }
-    $running = $script:Running.ContainsKey($id)
+    $run = $script:Runs[$id]
+    $phase = if ($run) { $run.Phase } else { '' }
+    $running = $script:Running.ContainsKey($id) -or $phase -eq 'running'
+    $starting = @('checks', 'setup', 'services') -contains $phase
     $exists = Test-ProjectFile $p
+    $state = if ($running) { 'running' } elseif ($starting) { 'starting' } elseif ($phase -eq 'failed') { 'failed' } else { 'idle' }
+    $key = "$state|$(if ($run) { $run.Status })|$exists"
+    if ($c.Key -eq $key) { return }     # the timer calls this often; only touch the UI on change
+    $c.Key = $key
 
-    if ($running) {
-        $c.Dot.Fill = Get-Brush '#3DDC97'
-        Animate $c.Dot $P_Opacity 0.3 750 -From 1 -Forever -Reverse
-        $c.StatusText.Text = 'Running'
-        $c.StatusText.Foreground = Get-Brush '#7FF0BE'
+    if ($running -or $starting) {
+        $c.Dot.Fill = Get-Brush $(if ($running) { '#3DDC97' } else { '#FFB547' })
+        Animate $c.Dot $P_Opacity 0.3 $(if ($running) { 750 } else { 380 }) -From 1 -Forever -Reverse
+        $c.StatusText.Text = if ($run) { $run.Status } else { 'Running' }
+        $c.StatusText.Foreground = Get-Brush $(if ($running) { '#7FF0BE' } else { '#FFD49A' })
         $c.Root.BorderBrush = $FlameBrush
-        Animate $c.Root.Effect $P_FxOpacity 0.8 1100 -From 0.3 -Ease $EaseSine -Forever -Reverse
+        Animate $c.Root.Effect $P_FxOpacity $(if ($running) { 0.8 } else { 0.55 }) 1100 -From 0.25 -Ease $EaseSine -Forever -Reverse
         $c.RunBtn.Background = Get-Brush '#2EFF4D6D'
         $c.RunBtn.Foreground = Get-Brush '#FFA3B4'
         $c.RunGlyph.Text = [string][char]0xE71A
         $c.RunText.Text = 'Stop'
         $c.RunBtn.Opacity = 1
+        $c.RunBtn.ToolTip = $null
+    } elseif ($state -eq 'failed') {
+        Stop-Animation $c.Dot $P_Opacity 1
+        Stop-Animation $c.Root.Effect $P_FxOpacity 0
+        $c.Dot.Fill = Get-Brush '#FF6B81'
+        $c.StatusText.Text = $run.Status
+        $c.StatusText.Foreground = Get-Brush '#FF8FA3'
+        $c.Root.BorderBrush = Get-Brush '#5A2A45'
+        $c.RunBtn.ClearValue($P_Bg)
+        $c.RunBtn.ClearValue($P_Fg)
+        $c.RunGlyph.Text = [string][char]0xE72C
+        $c.RunText.Text = 'Retry'
+        $c.RunBtn.Opacity = 1
+        $c.Root.ToolTip = $run.Error
     } else {
         Stop-Animation $c.Dot $P_Opacity 1
         Stop-Animation $c.Root.Effect $P_FxOpacity 0
@@ -958,13 +1165,44 @@ function Set-CardState($id) {
         $c.RunGlyph.Text = [string][char]0xE768
         $c.RunText.Text = 'Run'
         $c.RunBtn.Opacity = $(if ($exists) { 1 } else { 0.5 })
+        $c.Root.ToolTip = $p.Path
     }
+}
+
+# The small menu behind the card's chevron: plain Run, then one entry per recipe profile.
+function Show-ProfileMenu($button, $p) {
+    $read = Read-Recipe $p.Path
+    $menu = New-Object System.Windows.Controls.ContextMenu
+    $menu.Style = $window.FindResource('DarkMenu')
+    $entries = @(@{ Name = ''; Label = 'Run'; Desc = 'Default, no profile' })
+    foreach ($name in (Get-RecipeProfiles $read.Recipe)) {
+        $def = $read.Recipe.profiles.$name
+        $entries += @{ Name = $name; Label = "Run with '$name'"; Desc = [string]$def.description }
+    }
+    foreach ($e in $entries) {
+        $item = New-Object System.Windows.Controls.MenuItem
+        $item.Style = $window.FindResource('DarkMenuItem')
+        $item.Header = $e.Label
+        if ($e.Desc) { $item.ToolTip = $e.Desc }
+        [System.Windows.Controls.ToolTipService]::SetIsEnabled($item, $false)
+        $item.Tag = "$($p.Id)|$($e.Name)"
+        $item.Add_Click({
+            $parts = ([string]$this.Tag).Split('|')
+            $proj = Get-Project $parts[0]
+            if ($proj -and -not (Test-ProjectActive $proj.Id)) { Start-Project $proj $parts[1] }
+        })
+        [void]$menu.Items.Add($item)
+    }
+    $menu.PlacementTarget = $button
+    $menu.Placement = 'Bottom'
+    $menu.IsOpen = $true
 }
 
 function New-Card($p, $index) {
     $card = [System.Windows.Markup.XamlReader]::Parse($CardXaml)
     $c = @{ Root = $card }
-    foreach ($n in 'Tile','Initial','TitleText','Dot','StatusText','FileText','DirText','RunBtn','RunGlyph','RunText','EditBtn','DelBtn') {
+    foreach ($n in 'Tile','Initial','TitleText','Dot','StatusText','FileText','DirText','RunBtn','RunGlyph','RunText',
+                   'ProfileBtn','LogsBtn','EditBtn','DelBtn') {
         $c[$n] = $card.FindName($n)
     }
     $pal = $TilePalette[$index % $TilePalette.Count]
@@ -975,13 +1213,25 @@ function New-Card($p, $index) {
     try { $c.DirText.Text = Split-Path -Parent $p.Path } catch { $c.DirText.Text = '' }
     $card.ToolTip = $p.Path
     $card.Tag = $p.Id
-    foreach ($b in $c.RunBtn, $c.EditBtn, $c.DelBtn) { $b.Tag = $p.Id }
+    foreach ($b in $c.RunBtn, $c.ProfileBtn, $c.LogsBtn, $c.EditBtn, $c.DelBtn) { $b.Tag = $p.Id }
+
+    if (Test-IsRecipe $p) {
+        $c.LogsBtn.Visibility = 'Visible'
+        $c.FileText.Text = "$([System.IO.Path]::GetFileName($p.Path))  -  recipe"
+        $read = Read-Recipe $p.Path
+        if ($read.Recipe -and (Get-RecipeProfiles $read.Recipe).Count -gt 0) { $c.ProfileBtn.Visibility = 'Visible' }
+    }
 
     $c.RunBtn.Add_Click({
         $p = Get-Project $this.Tag
         if (-not $p) { return }
-        if ($script:Running.ContainsKey($p.Id)) { Stop-Project $p } else { Start-Project $p }
+        if (Test-ProjectActive $p.Id) { Stop-Project $p } else { Start-Project $p }
     })
+    $c.ProfileBtn.Add_Click({
+        $p = Get-Project $this.Tag
+        if ($p -and -not (Test-ProjectActive $p.Id)) { Show-ProfileMenu $this $p }
+    })
+    $c.LogsBtn.Add_Click({ Show-Logs (Get-Project $this.Tag) })
     $c.EditBtn.Add_Click({ Show-Editor (Get-Project $this.Tag) })
     $c.DelBtn.Add_Click({ Show-DeleteConfirm (Get-Project $this.Tag) })
 
@@ -989,13 +1239,16 @@ function New-Card($p, $index) {
         $s = $this.RenderTransform.Children[0]
         Animate $s $P_SX 1.025 160 -Ease $EaseOut
         Animate $s $P_SY 1.025 160 -Ease $EaseOut
-        if (-not $script:Running.ContainsKey($this.Tag)) { $this.BorderBrush = Get-Brush '#4A3F86' }
+        if (-not (Test-ProjectActive $this.Tag)) { $this.BorderBrush = Get-Brush '#4A3F86' }
     })
     $card.Add_MouseLeave({
         $s = $this.RenderTransform.Children[0]
         Animate $s $P_SX 1 200 -Ease $EaseOut
         Animate $s $P_SY 1 200 -Ease $EaseOut
-        if (-not $script:Running.ContainsKey($this.Tag)) { $this.BorderBrush = Get-Brush '#2B2654' }
+        if (-not (Test-ProjectActive $this.Tag)) {
+            $run = $script:Runs[$this.Tag]
+            $this.BorderBrush = Get-Brush $(if ($run -and $run.Phase -eq 'failed') { '#5A2A45' } else { '#2B2654' })
+        }
     })
 
     $script:Cards[$p.Id] = $c
@@ -1027,7 +1280,7 @@ function Render-Cards($animate = '') {
 
 function Update-Counts {
     $n = $script:Projects.Count
-    $r = $script:Running.Count
+    $r = @($script:Projects | Where-Object { Test-ProjectActive $_.Id }).Count
     if ($n -eq 0) {
         $CountText.Text = 'Nothing here yet'
         $EmptyState.Visibility = 'Visible'
@@ -1041,9 +1294,31 @@ function Update-Counts {
 }
 
 # ---------------------------------------------------------------- run / stop
-function Start-Project($p) {
+function Invoke-CardBounce($id) {
+    $c = $script:Cards[$id]
+    if (-not $c) { return }
+    $s = $c.Root.RenderTransform.Children[0]
+    Animate $s $P_SX 1.06 140 -Reverse -Ease $EaseOut
+    Animate $s $P_SY 1.06 140 -Reverse -Ease $EaseOut
+}
+
+function Start-Project($p, [string]$profile = '') {
     if (-not (Test-ProjectFile $p)) {
         Show-Toast "Command file not found. Edit the project to fix its path." 'error'
+        return
+    }
+    if (Test-IsRecipe $p) {
+        $run = New-Run $p.Id $p.Path $profile
+        $script:Runs[$p.Id] = $run
+        Set-CardState $p.Id
+        Update-Counts
+        if ($run.Phase -eq 'failed') {
+            Show-Notice 'error' "$($p.Title): the recipe needs fixing" $run.Error 'Open guide' { Show-Guide }
+            return
+        }
+        Invoke-CardBounce $p.Id
+        Show-Toast "$($p.Title) is starting$(if ($profile) { " ($profile)" })"
+        $procTimer.Stop(); $procTimer.Start()   # first tick soon, not in half a second
         return
     }
     $dir = Split-Path -Parent $p.Path
@@ -1064,12 +1339,7 @@ function Start-Project($p) {
         $script:Running[$p.Id] = $proc
         Set-CardState $p.Id
         Update-Counts
-        $c = $script:Cards[$p.Id]
-        if ($c) {
-            $s = $c.Root.RenderTransform.Children[0]
-            Animate $s $P_SX 1.06 140 -Reverse -Ease $EaseOut
-            Animate $s $P_SY 1.06 140 -Reverse -Ease $EaseOut
-        }
+        Invoke-CardBounce $p.Id
         Show-Toast "$($p.Title) is starting"
     } catch {
         Show-Toast "Could not start $($p.Title): $($_.Exception.Message)" 'error'
@@ -1077,6 +1347,15 @@ function Start-Project($p) {
 }
 
 function Stop-Project($p) {
+    $run = $script:Runs[$p.Id]
+    if (Test-RunActive $run) {
+        $window.Cursor = [System.Windows.Input.Cursors]::Wait
+        try { Stop-Run $run } finally { $window.Cursor = $null }
+        Set-CardState $p.Id
+        Update-Counts
+        Show-Toast "$($p.Title) stopped" 'info'
+        return
+    }
     $proc = $script:Running[$p.Id]
     if ($proc -and -not $proc.HasExited) {
         # /T takes the whole tree down: the console plus the servers it started.
@@ -1088,10 +1367,43 @@ function Stop-Project($p) {
     Show-Toast "$($p.Title) stopped" 'info'
 }
 
-# A project counts as running while its console window is open.
+# Script projects count as running while their console is open. Recipe runs are advanced
+# one step per tick by the engine, which reports failures, readiness and exits as events.
 $procTimer = New-Object System.Windows.Threading.DispatcherTimer
-$procTimer.Interval = [TimeSpan]::FromSeconds(1)
+$procTimer.Interval = [TimeSpan]::FromMilliseconds(500)
 $procTimer.Add_Tick({
+    foreach ($id in @($script:Runs.Keys)) {
+        $run = $script:Runs[$id]
+        if (-not (Test-RunActive $run)) { continue }
+        $ev = $null
+        try { $ev = Invoke-RunTick $run } catch {
+            Set-RunFailed $run "LocalRun error: $($_.Exception.Message)" $run.EngineLog
+            $ev = @{ Type = 'failed'; Text = $run.Error }
+        }
+        Set-CardState $id
+        if (-not $ev) { continue }
+        $p = Get-Project $id
+        $title = if ($p) { $p.Title } else { 'Project' }
+        switch ($ev.Type) {
+            'failed' {
+                Update-Counts
+                Show-Toast "$title did not start" 'error'
+                $tail = Get-LogTail $run.FailedLog 12
+                $text = $run.Error + $(if ($tail) { "`n`nLast lines of the log:`n$tail" } else { '' })
+                Show-Notice 'error' "$title did not start" $text 'Show logs' ([scriptblock]::Create("Show-Logs (Get-Project '$id')"))
+            }
+            'ready' {
+                Update-Counts
+                foreach ($u in $run.Opened) { try { Start-Process $u } catch {} }
+                Show-Toast "$title is running"
+                if ($run.Message) { Show-Notice 'ok' "$title is ready" $run.Message 'Copy' ([scriptblock]::Create("[System.Windows.Clipboard]::SetText(`$NoticeText.Text); Show-Toast 'Copied'")) }
+            }
+            'exited' {
+                Update-Counts
+                Show-Toast "$title - $($ev.Text)" 'error'
+            }
+        }
+    }
     foreach ($id in @($script:Running.Keys)) {
         if ($script:Running[$id].HasExited) {
             $script:Running.Remove($id)
@@ -1101,13 +1413,13 @@ $procTimer.Add_Tick({
             if ($p) { Show-Toast "$($p.Title) stopped" 'info' }
         }
     }
+    Update-LogsView
 })
 
 # ---------------------------------------------------------------- dialogs
 function Open-Overlay($panel) {
-    $EditPanel.Visibility = 'Collapsed'
-    $ConfirmPanel.Visibility = 'Collapsed'
-    $InfoPanel.Visibility = 'Collapsed'
+    foreach ($x in $EditPanel, $ConfirmPanel, $InfoPanel, $GuidePanel, $LogsPanel, $NoticePanel) { $x.Visibility = 'Collapsed' }
+    $Dialog.Width = if ($panel -eq $GuidePanel -or $panel -eq $LogsPanel) { 940 } elseif ($panel -eq $NoticePanel) { 640 } else { 540 }
     $panel.Visibility = 'Visible'
     $script:OverlayOpen = $true
     $Overlay.Visibility = 'Visible'
@@ -1121,6 +1433,122 @@ function Close-Overlay {
     Animate $Dialog.RenderTransform $P_SX 0.95 150
     Animate $Dialog.RenderTransform $P_SY 0.95 150
     Animate $Overlay $P_Opacity 0 160 -OnDone { if (-not $script:OverlayOpen) { $Overlay.Visibility = 'Collapsed' } }
+}
+
+# kind: 'error' | 'ok'. $action is an optional scriptblock behind the second button.
+function Show-Notice([string]$kind, [string]$title, [string]$text, [string]$actionLabel = '', [scriptblock]$action = $null) {
+    $NoticeTitle.Text = $title
+    $NoticeText.Text = $text
+    $NoticeBadge.Background = if ($kind -eq 'error') { Get-Brush '#E8445F' } else { $FlameBrush }
+    $NoticeGlyph.Text = [string][char]$(if ($kind -eq 'error') { 0xE711 } else { 0xE73E })
+    $script:NoticeAction = $action
+    $BtnNoticeAction.Content = $actionLabel
+    $BtnNoticeAction.Visibility = if ($action) { 'Visible' } else { 'Collapsed' }
+    Open-Overlay $NoticePanel
+}
+
+# ---------------------------------------------------------------- recipe guide
+$GuideTopics = New-Object System.Collections.ArrayList
+
+function Initialize-Guide {
+    $GuideTopics.Clear()
+    $GuideList.Items.Clear()
+    $starter = @'
+{
+  "name": "My app",
+  "services": [
+    { "name": "api", "run": "npm run dev", "port": 3000 }
+  ],
+  "open": ["http://localhost:3000"]
+}
+'@
+    [void]$GuideTopics.Add(@{ Title = 'Getting started'; Kind = 'template'; Code = $starter
+        Desc = "1. Save a file named localrun.json in the project folder.  2. Add it here with New project > Browse.  3. Press Run. LocalRun starts each service, waits until it is ready, and keeps its log. This is the smallest recipe: one service on port 3000." })
+    $spec = Join-Path $AppDir 'docs\recipe-format.md'
+    $specText = if (Test-Path -LiteralPath $spec) { [System.IO.File]::ReadAllText($spec, [System.Text.Encoding]::UTF8) } else { 'docs\recipe-format.md is missing from this installation.' }
+    [void]$GuideTopics.Add(@{ Title = 'All the rules'; Kind = 'doc'; Code = $specText
+        Desc = 'Every field, readiness kind, condition, profile and variable. This same text is what "Copy AI prompt" hands to an AI assistant.' })
+    $index = Join-Path $AppDir 'templates\index.json'
+    if (Test-Path -LiteralPath $index) {
+        foreach ($t in (ConvertFrom-Json ([System.IO.File]::ReadAllText($index, [System.Text.Encoding]::UTF8)))) {
+            $file = Join-Path $AppDir "templates\$($t.file)"
+            if (-not (Test-Path -LiteralPath $file)) { continue }
+            [void]$GuideTopics.Add(@{ Title = [string]$t.title; Kind = 'template'; Desc = [string]$t.description
+                Code = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8).TrimEnd() })
+        }
+    }
+    foreach ($t in $GuideTopics) {
+        $label = if ($t.Kind -eq 'template' -and $t.Title -ne 'Getting started') { "   " + $t.Title } else { $t.Title }
+        [void]$GuideList.Items.Add($label)
+    }
+}
+
+function Show-Guide {
+    if ($GuideList.Items.Count -eq 0) { Initialize-Guide }
+    if ($GuideList.SelectedIndex -lt 0) { $GuideList.SelectedIndex = 0 }
+    Open-Overlay $GuidePanel
+}
+
+function Get-AiPrompt {
+    $spec = ($GuideTopics | Where-Object { $_.Kind -eq 'doc' } | Select-Object -First 1).Code
+    return @"
+Write a LocalRun recipe (localrun.json) for the project described at the end.
+Follow the format below exactly. Answer with the JSON only, no explanation.
+Use forward slashes in paths, give every server a port, put one-off commands in setup
+(or as a task with "ready": { "exit": true } when they need a running service), mark
+databases and caches that may already be running as "shared", and add a "lan" profile
+if the app should be reachable from a phone.
+
+=== THE RECIPE FORMAT ===
+$spec
+
+=== THE PROJECT ===
+(Paste here: package.json / composer.json / *.csproj / pyproject.toml or requirements.txt,
+docker-compose.yml, .env.example, and the README's "run locally" section. Say which ports
+you use, which database, and whether you need phone access.)
+"@
+}
+
+# ---------------------------------------------------------------- logs
+$script:LogsProjectId = $null
+$script:LogsShownLength = -1
+
+function Show-Logs($p) {
+    if (-not $p) { return }
+    $script:LogsProjectId = $p.Id
+    $LogsTitle.Text = "Logs  -  $($p.Title)"
+    $LogsList.Items.Clear()
+    $dir = Join-Path $script:EngineLogRoot $p.Id
+    $files = @()
+    if (Test-Path -LiteralPath $dir) { $files = @(Get-ChildItem -LiteralPath $dir -Filter *.log | Sort-Object { if ($_.Name -eq 'localrun.log') { 0 } elseif ($_.Name -like 'setup-*') { 1 } else { 2 } }, Name) }
+    foreach ($f in $files) { [void]$LogsList.Items.Add($(if ($f.Name -eq 'localrun.log') { 'LocalRun (steps)' } else { $f.BaseName })) }
+    $script:LogsFiles = @($files | ForEach-Object { $_.FullName })
+    $run = $script:Runs[$p.Id]
+    $LogsStatus.Text = if ($run) { "$($run.Status)$(if ($run.Profile) { "   -   profile: $($run.Profile)" })" } else { 'Not run yet in this session. Logs from the last run are shown if there are any.' }
+    $LogsText.Text = if ($files.Count -eq 0) { 'No logs yet. Press Run on the card first.' } else { '' }
+    $script:LogsShownLength = -1
+    if ($files.Count -gt 0) {
+        # Open on the failing log when there is one, otherwise on the steps.
+        $pick = 0
+        if ($run -and $run.FailedLog) { $i = [array]::IndexOf($script:LogsFiles, $run.FailedLog); if ($i -ge 0) { $pick = $i } }
+        $LogsList.SelectedIndex = $pick
+    }
+    Open-Overlay $LogsPanel
+}
+
+function Update-LogsView([switch]$Force) {
+    if (-not $script:OverlayOpen -or $LogsPanel.Visibility -ne 'Visible') { return }
+    $i = $LogsList.SelectedIndex
+    if ($i -lt 0 -or $i -ge $script:LogsFiles.Count) { return }
+    $file = $script:LogsFiles[$i]
+    $len = try { (Get-Item -LiteralPath $file).Length } catch { 0 }
+    if (-not $Force -and $len -eq $script:LogsShownLength) { return }
+    $script:LogsShownLength = $len
+    $atEnd = $LogsText.VerticalOffset + $LogsText.ViewportHeight -ge $LogsText.ExtentHeight - 20
+    $LogsText.Text = Get-LogTail $file 400
+    if ($atEnd -or $Force) { $LogsText.ScrollToEnd() }
+    $run = $script:Runs[$script:LogsProjectId]
+    if ($run) { $LogsStatus.Text = "$($run.Status)$(if ($run.Profile) { "   -   profile: $($run.Profile)" })" }
 }
 
 function Show-DialogError($text) {
@@ -1146,11 +1574,18 @@ function Save-Editor {
     $t = $TxtTitle.Text.Trim()
     $path = $TxtPath.Text.Trim().Trim('"')
     if (-not $t) { Show-DialogError 'Give the project a title.'; return }
-    if (-not $path) { Show-DialogError 'Choose the command file that starts this project.'; return }
+    if (-not $path) { Show-DialogError 'Choose the recipe or command file that starts this project.'; return }
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -and -not $script:AllowMissing) {
         Show-DialogError "That file doesn't exist on this PC. Press save again to keep it anyway."
         $script:AllowMissing = $true
         return
+    }
+    if ([System.IO.Path]::GetExtension($path).ToLower() -eq '.json' -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+        $read = Read-Recipe $path
+        if ($read.Errors.Count -gt 0) {
+            Show-DialogError ("This recipe needs fixing first:`n- " + (@($read.Errors | Select-Object -First 4) -join "`n- "))
+            return
+        }
     }
     try {
         if ($script:EditingId) {
@@ -1192,6 +1627,8 @@ function Confirm-Delete {
         $p = Get-Project $script:DeletingId
         if ($p) {
             try {
+                if (Test-RunActive $script:Runs[$p.Id]) { Stop-Run $script:Runs[$p.Id] }
+                $script:Runs.Remove($p.Id)
                 Remove-ProjectRow $p.Id
                 Load-Projects
                 $script:Running.Remove($p.Id)
@@ -1207,6 +1644,45 @@ function Confirm-Delete {
 }
 
 # ---------------------------------------------------------------- wiring
+$BtnGuide.Add_Click({ Show-Guide })
+$LnkEditorGuide.Add_Click({ Show-Guide })
+$GuideList.Add_SelectionChanged({
+    $i = $GuideList.SelectedIndex
+    if ($i -lt 0) { return }
+    $t = $GuideTopics[$i]
+    $GuideTitle.Text = $t.Title
+    $GuideDesc.Text = $t.Desc
+    $GuideCode.Text = $t.Code
+    $GuideCode.ScrollToHome()
+    $BtnGuideCreate.IsEnabled = $t.Kind -eq 'template'
+})
+$BtnGuideCopy.Add_Click({ [System.Windows.Clipboard]::SetText($GuideCode.Text); Show-Toast 'Copied' })
+$BtnCopyPrompt.Add_Click({
+    [System.Windows.Clipboard]::SetText((Get-AiPrompt))
+    Show-Toast "AI prompt copied. Paste it into your AI assistant, then add the project's files."
+})
+$BtnGuideCreate.Add_Click({
+    $dlg = New-Object Microsoft.Win32.SaveFileDialog
+    $dlg.Title = 'Save the recipe in the project folder'
+    $dlg.FileName = 'localrun.json'
+    $dlg.Filter = 'LocalRun recipe (*.json)|*.json'
+    if ($dlg.ShowDialog($window)) {
+        [System.IO.File]::WriteAllText($dlg.FileName, $GuideCode.Text.TrimEnd() + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+        Show-Toast 'Recipe saved. Edit it for your project, then add it.'
+        Show-Editor $null $dlg.FileName
+    }
+})
+$BtnGuideClose.Add_Click({ Close-Overlay })
+$LogsList.Add_SelectionChanged({ Update-LogsView -Force })
+$BtnLogsFolder.Add_Click({
+    $dir = Join-Path $script:EngineLogRoot $script:LogsProjectId
+    if (Test-Path -LiteralPath $dir) { Start-Process explorer.exe -ArgumentList "`"$dir`"" }
+})
+$BtnLogsCopy.Add_Click({ [System.Windows.Clipboard]::SetText($LogsText.Text); Show-Toast 'Log copied' })
+$BtnLogsClose.Add_Click({ Close-Overlay })
+$BtnNoticeClose.Add_Click({ Close-Overlay })
+$BtnNoticeAction.Add_Click({ if ($script:NoticeAction) { & $script:NoticeAction } })
+
 $BtnNew.Add_Click({ Show-Editor $null })
 $BtnEmptyAdd.Add_Click({ Show-Editor $null })
 $BtnCancel.Add_Click({ Close-Overlay })
@@ -1248,8 +1724,8 @@ $TxtTitle.Add_TextChanged({ $DialogError.Visibility = 'Collapsed' })
 
 $BtnBrowse.Add_Click({
     $dlg = New-Object Microsoft.Win32.OpenFileDialog
-    $dlg.Title = 'Choose the command that starts this project'
-    $dlg.Filter = 'Run commands (*.bat;*.cmd;*.ps1)|*.bat;*.cmd;*.ps1|All files (*.*)|*.*'
+    $dlg.Title = 'Choose the recipe or command that starts this project'
+    $dlg.Filter = 'Recipes and run commands (*.json;*.bat;*.cmd;*.ps1)|*.json;*.bat;*.cmd;*.ps1|LocalRun recipe (*.json)|*.json|All files (*.*)|*.*'
     $current = $TxtPath.Text.Trim().Trim('"')
     if ($current) {
         $folder = Split-Path -Parent $current -ErrorAction SilentlyContinue
@@ -1257,7 +1733,14 @@ $BtnBrowse.Add_Click({
     }
     if ($dlg.ShowDialog($window)) {
         $TxtPath.Text = $dlg.FileName
-        if (-not $TxtTitle.Text.Trim()) { $TxtTitle.Text = Split-Path -Leaf (Split-Path -Parent $dlg.FileName) }
+        if (-not $TxtTitle.Text.Trim()) {
+            $name = ''
+            if ([System.IO.Path]::GetExtension($dlg.FileName).ToLower() -eq '.json') {
+                $read = Read-Recipe $dlg.FileName
+                if ($read.Recipe -and $read.Recipe.name) { $name = [string]$read.Recipe.name }
+            }
+            $TxtTitle.Text = if ($name) { $name } else { Split-Path -Leaf (Split-Path -Parent $dlg.FileName) }
+        }
     }
 })
 
@@ -1331,6 +1814,20 @@ $window.Add_Activated({
     try { Load-Projects } catch { Write-Log "Reload failed: $($_.Exception.Message)"; return }
     if ((Get-ListSignature) -ne $before) { Render-Cards }
     else { foreach ($p in $script:Projects) { Set-CardState $p.Id } }
+})
+
+# Recipe services run hidden, so closing LocalRun would leave them running with no window.
+# Ask first; the default is to stop them.
+$window.Add_Closing({
+    param($s, $e)
+    $active = @($script:Runs.Values | Where-Object { Test-RunActive $_ })
+    if ($active.Count -eq 0) { return }
+    $names = @($active | ForEach-Object { $p = Get-Project $_.ProjectId; if ($p) { $p.Title } }) -join ', '
+    $ans = [System.Windows.MessageBox]::Show(
+        "Stop the running projects before closing?`n`n$names`n`nYes: stop them.  No: leave them running in the background (they have no window; LocalRun cannot stop them after it restarts).",
+        'LocalRun', 'YesNoCancel', 'Question', 'Yes')
+    if ($ans -eq 'Cancel') { $e.Cancel = $true; return }
+    if ($ans -eq 'Yes') { foreach ($r in $active) { Stop-Run $r } }
 })
 
 $window.Add_Closed({

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
+  "name": "ASP.NET Core Web API",
+  "checks": [
+    { "name": ".NET 8+ SDK", "command": "dotnet --version", "match": "^(8|9|10)\\.", "fix": "Install the .NET 8 SDK or newer" }
+  ],
+  "services": [
+    { "name": "api", "run": "dotnet watch run --project src\\Api --urls http://127.0.0.1:5000",
+      "port": 5000, "ready": { "url": "http://127.0.0.1:5000/swagger", "timeout": 180 } }
+  ],
+  "open": ["http://127.0.0.1:5000/swagger"]
+}

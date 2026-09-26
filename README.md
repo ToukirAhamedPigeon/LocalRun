@@ -28,7 +28,9 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 ---
 
 ## Features
-- Add, edit and remove projects (title + command file). You can also drag a command file onto the window to add it.
+- ⭐ **Recipes (`localrun.json`):** describe how a project starts (checks, setup steps, services, readiness, profiles) and LocalRun runs it. It starts services in order, waits until each one is ready, keeps a log per service, and stops everything cleanly. Any stack: PHP, Python, Node, .NET, Java, Docker, Android. See [Recipes](#recipes).
+- A **Recipe guide** inside the app, with the full rules, 12 ready-made templates, *Save as localrun.json*, and a *Copy AI prompt* button, so an AI assistant can write the recipe for you.
+- Add, edit and remove projects (title + recipe or command file). You can also drag a file onto the window to add it.
 - **Run** opens the command in its own console window, started from the project's folder.
 - A running project glows and shows **Stop**, which closes the console and every process it started.
 - Missing command files are flagged, so the same app works across several PCs.
@@ -48,6 +50,25 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 - Unattended install: `LocalRun-Setup-<version>.exe -Quiet [-InstallDir <folder>]`. Using `-Quiet` means you accept the [license and terms](TERMS.md).
 
 > **"Windows protected your PC"?** The installer is not code-signed, so Microsoft Defender SmartScreen warns about it the first time. Click **More info → Run anyway**.
+
+### Recipes
+A recipe is a `localrun.json` file in the project folder. The smallest one:
+
+```json
+{
+  "name": "My API",
+  "services": [ { "name": "api", "run": "npm run dev", "port": 3000 } ]
+}
+```
+
+A real one adds **checks** (with a fix hint), **setup** steps that run only when needed, several **services** started in order, each **ready** by port, URL, log line or command, **shared** services such as a database you already run (left alone, never stopped), one-off **tasks** after a service (migrations once the database is up), and **profiles** such as `lan` for testing on a phone over the same Wi-Fi (`${LAN_IP}`).
+
+- Full rules: [docs/recipe-format.md](docs/recipe-format.md), also shown in the app under **Recipe guide → All the rules**.
+- Templates: [templates/](templates) for Vite, FastAPI + Vite, Laravel on Laragon, NestJS + PostgreSQL, Django, ASP.NET Core, Spring Boot, Docker Compose, Flutter (Android), React Native (Android), desktop apps, and two projects together.
+- Editor support: add `"$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json"` for autocomplete and validation in VS Code.
+- With AI: **Recipe guide → Copy AI prompt**, paste it into any assistant with the project's key files, and save the answer as `localrun.json`.
+
+Profiles appear under the **▾** button next to **Run**. The **Logs** button shows each service's output. When a run fails, LocalRun says which step failed, shows the last lines of its log, and stops what it had started.
 
 ### Portable (no install)
 1. Download **`LocalRun-<version>.zip`** from the release, or clone this repository.
@@ -125,6 +146,13 @@ The app is one PowerShell process with one WPF UI thread. It has four logical la
 ```
 LocalRun/
 ├── LocalRun.ps1        # the application (UI, data, process control)
+├── engine.ps1          # the recipe engine: checks, setup, services, readiness, logs, stop (no UI)
+├── docs/
+│   ├── recipe-format.md  # the recipe rules (also the in-app guide and the AI prompt)
+│   └── engine-plan.md    # roadmap: detectors + a small local model to write recipes
+├── schema/
+│   └── localrun.schema.json  # JSON Schema for editor autocomplete and validation
+├── templates/          # ready-made recipes per stack, listed in templates/index.json
 ├── LocalRun.vbs        # hidden-window launcher (normal entry point)
 ├── LocalRun.bat        # fallback launcher where .vbs is blocked
 ├── Install.ps1         # portable use: creates Desktop + Start Menu shortcuts on this PC
@@ -279,7 +307,9 @@ Release binaries (`LocalRun-Setup-<version>.exe`) are built from this repository
 All team members use multi-factor authentication for GitHub and SignPath.
 
 ## Roadmap
-**One click, any stack.** Today each project needs its own start script. The plan is to replace those scripts with a short per-project *recipe*, run by a shared engine inside LocalRun. Recipes would be drafted by built-in detectors and a small, free, fine-tuned local model, with the whole install kept under 500 MB. See [docs/engine-plan.md](docs/engine-plan.md). Status: proposal.
+**One click, any stack.** Instead of a start script per project, a short per-project *recipe* run by a shared engine inside LocalRun. See [docs/engine-plan.md](docs/engine-plan.md).
+- ✅ **1.2.0:** the recipe format, the engine, the in-app guide, templates and the AI prompt.
+- Next: detectors that draft a recipe from a project's files, then a small, free, fine-tuned local model for the rest, with the whole install kept under 500 MB.
 
 ## License
 LocalRun is free and open-source software, released under the [MIT License](LICENSE).
