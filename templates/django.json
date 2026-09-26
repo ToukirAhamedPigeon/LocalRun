@@ -2,11 +2,27 @@
   "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
   "name": "Django",
   "checks": [
-    { "exists": ".venv/Scripts/python.exe", "fix": "py -3.12 -m venv .venv, then .venv\\Scripts\\pip install -r requirements.txt" }
+    {
+      "name": "virtual environment",
+      "exists": ".venv/Scripts/python.exe",
+      "fix": "py -3.12 -m venv .venv, then .venv\\Scripts\\pip install -r requirements.txt"
+    }
   ],
   "services": [
-    { "name": "migrate", "run": ".venv\\Scripts\\python manage.py migrate --noinput", "ready": { "exit": true } },
-    { "name": "web", "run": ".venv\\Scripts\\python manage.py runserver 127.0.0.1:8000", "port": 8000 }
+    {
+      "name": "migrate",
+      "run": ".venv\\Scripts\\python manage.py migrate --noinput",
+      "ready": {
+        "exit": true
+      }
+    },
+    {
+      "name": "web",
+      "run": ".venv\\Scripts\\python manage.py runserver 127.0.0.1:8000",
+      "port": 8000
+    }
   ],
-  "open": ["http://127.0.0.1:8000"]
+  "open": [
+    "http://127.0.0.1:8000"
+  ]
 }

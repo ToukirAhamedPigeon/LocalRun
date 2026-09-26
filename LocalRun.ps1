@@ -14,7 +14,7 @@ $DbFile     = Join-Path $DataDir 'localrun.db'
 $LogFile    = Join-Path $DataDir 'localrun.log'
 $JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
-$AppVersion = '1.2.0'
+$AppVersion = '1.2.1'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
@@ -43,7 +43,7 @@ function Write-Log($msg) {
     } catch {}
 }
 
-# Recipe engine (localrun.json): checks, setup, services, readiness, logs, stop.
+# Recipe engine (<app>/local-run/startapp.json): checks, setup, services, readiness, logs, stop.
 . (Join-Path $AppDir 'engine.ps1')
 
 # ---------------------------------------------------------------- native: window + SQLite
@@ -601,7 +601,7 @@ $WindowXaml = @'
         <TextBlock x:Name="CountText" FontSize="13" Foreground="#8F89B8" Margin="0,4,0,0"/>
       </StackPanel>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-        <Button x:Name="BtnGuide" Style="{StaticResource GhostBtn}" ToolTip="How to write a localrun.json recipe">
+        <Button x:Name="BtnGuide" Style="{StaticResource GhostBtn}" ToolTip="How to write local-run/startapp.json">
           <StackPanel Orientation="Horizontal">
             <TextBlock Text="&#xE897;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
             <TextBlock Text="Recipe guide" Margin="8,0,0,0" VerticalAlignment="Center"/>
@@ -684,7 +684,7 @@ $WindowXaml = @'
         <Grid>
           <StackPanel x:Name="EditPanel">
             <TextBlock x:Name="DialogTitle" Text="New project" FontSize="21" FontWeight="SemiBold"/>
-            <TextBlock Text="Point LocalRun at the project's localrun.json recipe, or at a .bat, .cmd or .ps1 that starts it." Foreground="#8F89B8" FontSize="13" Margin="0,5,0,22" TextWrapping="Wrap"/>
+            <TextBlock Text="Choose the app's local-run/startapp.json (or paste the app folder), or a .bat, .cmd or .ps1 that starts it." Foreground="#8F89B8" FontSize="13" Margin="0,5,0,22" TextWrapping="Wrap"/>
             <TextBlock Text="PROJECT TITLE" Style="{StaticResource FieldLabel}"/>
             <TextBox x:Name="TxtTitle" Style="{StaticResource Field}"/>
             <Grid Margin="0,16,0,7">
@@ -778,7 +778,7 @@ $WindowXaml = @'
             <StackPanel>
               <TextBlock Text="Recipe guide" FontSize="21" FontWeight="SemiBold"/>
               <TextBlock Foreground="#8F89B8" FontSize="13" Margin="0,5,0,16" TextWrapping="Wrap"
-                         Text="Describe how a project starts in a localrun.json file: checks, setup and services. LocalRun runs it, waits for each service, keeps the logs and stops everything cleanly."/>
+                         Text="Each app keeps a recipe at local-run/startapp.json that says how it starts: checks, setup and services. LocalRun runs it, waits for each service, keeps the logs and stops everything cleanly."/>
             </StackPanel>
             <Grid Grid.Row="1">
               <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -799,7 +799,7 @@ $WindowXaml = @'
               </Button>
               <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnGuideCopy" Style="{StaticResource GhostBtn}" Content="Copy"/>
-                <Button x:Name="BtnGuideCreate" Style="{StaticResource FlameBtn}" Content="Save as localrun.json..." Margin="10,0,0,0"/>
+                <Button x:Name="BtnGuideCreate" Style="{StaticResource FlameBtn}" Content="Save into an app folder..." Margin="10,0,0,0"/>
                 <Button x:Name="BtnGuideClose" Style="{StaticResource GhostBtn}" Content="Close" Margin="10,0,0,0"/>
               </StackPanel>
             </Grid>
@@ -1217,7 +1217,9 @@ function New-Card($p, $index) {
 
     if (Test-IsRecipe $p) {
         $c.LogsBtn.Visibility = 'Visible'
-        $c.FileText.Text = "$([System.IO.Path]::GetFileName($p.Path))  -  recipe"
+        $inFolder = (Split-Path -Leaf (Split-Path -Parent $p.Path)) -eq $script:RecipeFolder
+        $c.FileText.Text = $(if ($inFolder) { "$($script:RecipeFolder)/$([System.IO.Path]::GetFileName($p.Path))" } else { [System.IO.Path]::GetFileName($p.Path) }) + '  -  recipe'
+        $c.DirText.Text = Get-RecipeRoot $p.Path
         $read = Read-Recipe $p.Path
         if ($read.Recipe -and (Get-RecipeProfiles $read.Recipe).Count -gt 0) { $c.ProfileBtn.Visibility = 'Visible' }
     }
@@ -1422,6 +1424,7 @@ function Open-Overlay($panel) {
     $Dialog.Width = if ($panel -eq $GuidePanel -or $panel -eq $LogsPanel) { 940 } elseif ($panel -eq $NoticePanel) { 640 } else { 540 }
     $panel.Visibility = 'Visible'
     $script:OverlayOpen = $true
+    $Toast.VerticalAlignment = 'Top'; $Toast.Margin = New-Object System.Windows.Thickness 0, 18, 0, 0
     $Overlay.Visibility = 'Visible'
     Animate $Overlay $P_Opacity 1 180
     Animate $Dialog.RenderTransform $P_SX 1 320 -From 0.92 -Ease $EaseBack
@@ -1430,6 +1433,7 @@ function Open-Overlay($panel) {
 
 function Close-Overlay {
     $script:OverlayOpen = $false
+    $Toast.VerticalAlignment = 'Bottom'; $Toast.Margin = New-Object System.Windows.Thickness 0, 0, 0, 72
     Animate $Dialog.RenderTransform $P_SX 0.95 150
     Animate $Dialog.RenderTransform $P_SY 0.95 150
     Animate $Overlay $P_Opacity 0 160 -OnDone { if (-not $script:OverlayOpen) { $Overlay.Visibility = 'Collapsed' } }
@@ -1457,13 +1461,19 @@ function Initialize-Guide {
 {
   "name": "My app",
   "services": [
-    { "name": "api", "run": "npm run dev", "port": 3000 }
+    {
+      "name": "api",
+      "run": "npm run dev",
+      "port": 3000
+    }
   ],
-  "open": ["http://localhost:3000"]
+  "open": [
+    "http://localhost:3000"
+  ]
 }
 '@
     [void]$GuideTopics.Add(@{ Title = 'Getting started'; Kind = 'template'; Code = $starter
-        Desc = "1. Save a file named localrun.json in the project folder.  2. Add it here with New project > Browse.  3. Press Run. LocalRun starts each service, waits until it is ready, and keeps its log. This is the smallest recipe: one service on port 3000." })
+        Desc = "1. In the app folder create local-run\startapp.json (or press 'Save into an app folder').  2. Add it here with New project > Browse, or paste the app folder.  3. Press Run. LocalRun starts each service in the app folder, waits until it is ready, and keeps its log. This is the smallest recipe: one service on port 3000." })
     $spec = Join-Path $AppDir 'docs\recipe-format.md'
     $specText = if (Test-Path -LiteralPath $spec) { [System.IO.File]::ReadAllText($spec, [System.Text.Encoding]::UTF8) } else { 'docs\recipe-format.md is missing from this installation.' }
     [void]$GuideTopics.Add(@{ Title = 'All the rules'; Kind = 'doc'; Code = $specText
@@ -1492,8 +1502,11 @@ function Show-Guide {
 function Get-AiPrompt {
     $spec = ($GuideTopics | Where-Object { $_.Kind -eq 'doc' } | Select-Object -First 1).Code
     return @"
-Write a LocalRun recipe (localrun.json) for the project described at the end.
+Write a LocalRun recipe for the project described at the end. It will be saved as
+local-run/startapp.json inside the app folder, so relative paths start from the app folder.
 Follow the format below exactly. Answer with the JSON only, no explanation.
+Make it human-readable: 2-space indentation, one field per line, every object and array
+opened over several lines, a "name" on every check, step and service, a "fix" on every check.
 Use forward slashes in paths, give every server a port, put one-off commands in setup
 (or as a task with "ready": { "exit": true } when they need a running service), mark
 databases and caches that may already be running as "shared", and add a "lan" profile
@@ -1562,17 +1575,32 @@ function Show-Editor($p, $presetPath = '') {
     $BtnSave.Content = if ($p) { 'Save changes' } else { 'Add project' }
     $TxtTitle.Text = if ($p) { $p.Title } else { '' }
     $TxtPath.Text = if ($p) { $p.Path } else { $presetPath }
-    if (-not $p -and $presetPath) { $TxtTitle.Text = Split-Path -Leaf (Split-Path -Parent $presetPath) }
+    if (-not $p -and $presetPath) { $TxtTitle.Text = Get-DefaultTitle $presetPath }
     $DialogError.Visibility = 'Collapsed'
     $script:AllowMissing = $false
     Open-Overlay $EditPanel
     $window.Dispatcher.BeginInvoke([System.Windows.Threading.DispatcherPriority]::Input, [action]{ $TxtTitle.Focus(); $TxtTitle.SelectAll() }) | Out-Null
 }
 
+# Title suggestion: the recipe's name, else the app folder's name.
+function Get-DefaultTitle([string]$path) {
+    if ([System.IO.Path]::GetExtension($path).ToLower() -eq '.json' -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+        $read = Read-Recipe $path
+        if ($read.Recipe -and $read.Recipe.name) { return [string]$read.Recipe.name }
+        return Split-Path -Leaf (Get-RecipeRoot $path)
+    }
+    return Split-Path -Leaf (Split-Path -Parent $path)
+}
+
 function Save-Editor {
     $ErrorActionPreference = 'Stop'
     $t = $TxtTitle.Text.Trim()
-    $path = $TxtPath.Text.Trim().Trim('"')
+    $path = Resolve-RecipeInput $TxtPath.Text.Trim().Trim('"').TrimEnd('\', '/')
+    if (Test-Path -LiteralPath $path -PathType Container) {
+        Show-DialogError "This folder has no $($script:RecipeFolder)\$($script:RecipeFile). Create one from the Recipe guide, or choose a .bat, .cmd or .ps1."
+        return
+    }
+    $TxtPath.Text = $path
     if (-not $t) { Show-DialogError 'Give the project a title.'; return }
     if (-not $path) { Show-DialogError 'Choose the recipe or command file that starts this project.'; return }
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -and -not $script:AllowMissing) {
@@ -1661,16 +1689,24 @@ $BtnCopyPrompt.Add_Click({
     [System.Windows.Clipboard]::SetText((Get-AiPrompt))
     Show-Toast "AI prompt copied. Paste it into your AI assistant, then add the project's files."
 })
+# Writes the shown template to <app folder>\local-run\startapp.json, then opens New project with it.
 $BtnGuideCreate.Add_Click({
-    $dlg = New-Object Microsoft.Win32.SaveFileDialog
-    $dlg.Title = 'Save the recipe in the project folder'
-    $dlg.FileName = 'localrun.json'
-    $dlg.Filter = 'LocalRun recipe (*.json)|*.json'
-    if ($dlg.ShowDialog($window)) {
-        [System.IO.File]::WriteAllText($dlg.FileName, $GuideCode.Text.TrimEnd() + "`r`n", (New-Object System.Text.UTF8Encoding $false))
-        Show-Toast 'Recipe saved. Edit it for your project, then add it.'
-        Show-Editor $null $dlg.FileName
+    Add-Type -AssemblyName System.Windows.Forms
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "Choose the app folder. The recipe is saved as $($script:RecipeFolder)\$($script:RecipeFile) inside it."
+    $dlg.ShowNewFolderButton = $false
+    if ($dlg.ShowDialog() -ne 'OK') { return }
+    $dir = Join-Path $dlg.SelectedPath $script:RecipeFolder
+    $file = Join-Path $dir $script:RecipeFile
+    if (Test-Path -LiteralPath $file) {
+        $ans = [System.Windows.MessageBox]::Show("$file already exists.`n`nReplace it with this template?", 'LocalRun', 'YesNo', 'Warning', 'No')
+        if ($ans -ne 'Yes') { return }
     }
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    [System.IO.File]::WriteAllText($file, $GuideCode.Text.TrimEnd() + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+    Show-Toast "Saved $($script:RecipeFolder)\$($script:RecipeFile). Edit it for this app, then add it."
+    Show-Editor $null $file
+    $TxtTitle.Text = Split-Path -Leaf $dlg.SelectedPath
 })
 $BtnGuideClose.Add_Click({ Close-Overlay })
 $LogsList.Add_SelectionChanged({ Update-LogsView -Force })
@@ -1733,14 +1769,7 @@ $BtnBrowse.Add_Click({
     }
     if ($dlg.ShowDialog($window)) {
         $TxtPath.Text = $dlg.FileName
-        if (-not $TxtTitle.Text.Trim()) {
-            $name = ''
-            if ([System.IO.Path]::GetExtension($dlg.FileName).ToLower() -eq '.json') {
-                $read = Read-Recipe $dlg.FileName
-                if ($read.Recipe -and $read.Recipe.name) { $name = [string]$read.Recipe.name }
-            }
-            $TxtTitle.Text = if ($name) { $name } else { Split-Path -Leaf (Split-Path -Parent $dlg.FileName) }
-        }
+        if (-not $TxtTitle.Text.Trim()) { $TxtTitle.Text = Get-DefaultTitle $dlg.FileName }
     }
 })
 
@@ -1783,7 +1812,11 @@ $window.Add_Drop({
     param($s, $e)
     $DropHint.Visibility = 'Collapsed'
     $files = $e.Data.GetData([System.Windows.DataFormats]::FileDrop)
-    if ($files -and (Test-Path -LiteralPath $files[0] -PathType Leaf)) { Show-Editor $null $files[0] }
+    if (-not $files) { return }
+    # A dropped app folder means its local-run\startapp.json.
+    $target = Resolve-RecipeInput $files[0]
+    if (Test-Path -LiteralPath $target -PathType Leaf) { Show-Editor $null $target }
+    else { Show-Toast "No $($script:RecipeFolder)\$($script:RecipeFile) in that folder" 'error' }
 })
 
 $window.Add_SourceInitialized({

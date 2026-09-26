@@ -28,7 +28,7 @@ Reading the two real scripts line by line, the variability is **not** where it l
 
 > **Build the machinery once, inside LocalRun. Each project then becomes a short file of facts: a *recipe*.**
 
-## 3. The recipe (`localrun.json` in the project folder)
+## 3. The recipe (`local-run/startapp.json` in the app folder)
 
 Declarative data in a small, fixed vocabulary. It lives with the project, so it is versioned with the code and teammates share it.
 

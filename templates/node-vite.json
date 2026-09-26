@@ -1,21 +1,53 @@
 {
   "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
   "name": "Vite app (React / Vue / Svelte)",
-  "env": { "VITE_HOST": "127.0.0.1" },
+  "env": {
+    "VITE_HOST": "127.0.0.1"
+  },
   "checks": [
-    { "name": "Node 18+", "command": "node --version", "match": "^v(1[89]|[2-9][0-9])\\.", "fix": "Install Node 18 or newer (nvm install 20)" }
+    {
+      "name": "Node 18+",
+      "command": "node --version",
+      "match": "^v(1[89]|[2-9][0-9])\\.",
+      "fix": "Install Node 18 or newer (nvm install 20)"
+    }
   ],
   "setup": [
-    { "name": "npm ci", "run": "npm ci",
-      "when": { "any": [ { "missing": "node_modules" }, { "newer": ["package-lock.json", "node_modules/.package-lock.json"] } ] } }
+    {
+      "name": "npm ci",
+      "run": "npm ci",
+      "when": {
+        "any": [
+          {
+            "missing": "node_modules"
+          },
+          {
+            "newer": [
+              "package-lock.json",
+              "node_modules/.package-lock.json"
+            ]
+          }
+        ]
+      }
+    }
   ],
   "services": [
-    { "name": "web", "run": "npm run dev -- --host %VITE_HOST% --port 5173 --strictPort", "port": 5173 }
+    {
+      "name": "web",
+      "run": "npm run dev -- --host %VITE_HOST% --port 5173 --strictPort",
+      "port": 5173
+    }
   ],
   "profiles": {
-    "lan": { "description": "Open it from a phone on the same Wi-Fi",
-             "env": { "VITE_HOST": "0.0.0.0" },
-             "message": "On your phone open http://${LAN_IP}:5173" }
+    "lan": {
+      "description": "Open it from a phone on the same Wi-Fi",
+      "env": {
+        "VITE_HOST": "0.0.0.0"
+      },
+      "message": "On your phone open http://${LAN_IP}:5173"
+    }
   },
-  "open": ["http://localhost:5173"]
+  "open": [
+    "http://localhost:5173"
+  ]
 }

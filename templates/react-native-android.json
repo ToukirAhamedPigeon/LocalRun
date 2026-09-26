@@ -2,13 +2,37 @@
   "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
   "name": "React Native on an Android emulator",
   "setup": [
-    { "name": "npm ci", "run": "npm ci", "when": { "missing": "node_modules" } }
+    {
+      "name": "npm ci",
+      "run": "npm ci",
+      "when": {
+        "missing": "node_modules"
+      }
+    }
   ],
   "services": [
-    { "name": "emulator", "run": "emulator -avd Pixel_7_API_34",
-      "ready": { "command": "adb shell getprop sys.boot_completed", "match": "1", "timeout": 240 } },
-    { "name": "metro", "run": "npx react-native start", "port": 8081 },
-    { "name": "install", "run": "npx react-native run-android --no-packager", "ready": { "exit": true, "timeout": 900 } }
+    {
+      "name": "emulator",
+      "run": "emulator -avd Pixel_7_API_34",
+      "ready": {
+        "command": "adb shell getprop sys.boot_completed",
+        "match": "1",
+        "timeout": 240
+      }
+    },
+    {
+      "name": "metro",
+      "run": "npx react-native start",
+      "port": 8081
+    },
+    {
+      "name": "install",
+      "run": "npx react-native run-android --no-packager",
+      "ready": {
+        "exit": true,
+        "timeout": 900
+      }
+    }
   ],
   "message": "iOS simulators need macOS. On Windows, run the Android target."
 }

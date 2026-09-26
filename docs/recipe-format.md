@@ -1,21 +1,53 @@
-# LocalRun recipe format (localrun.json)
+# LocalRun recipe format (local-run/startapp.json)
 
 A recipe tells LocalRun how to start a project: what to check, what to prepare, which services to run, in which order, and how to know each one is ready. LocalRun does the running, waiting, logging and stopping. The recipe only states facts.
 
-Put `localrun.json` in the project folder, then add it in LocalRun with **New project → Browse**. Existing `.bat`, `.cmd` and `.ps1` files still work as before.
+## Where it lives
+
+Every app keeps its recipe **inside its own folder**, always at the same place:
+
+```
+my-app/
+├── local-run/
+│   └── startapp.json    <- the recipe
+├── src/
+├── package.json
+└── ...
+```
+
+- Add the project in LocalRun with **New project → Browse**, and choose `local-run/startapp.json`. You can also paste or drop the **app folder** itself: LocalRun finds `local-run/startapp.json` inside it.
+- **Relative paths start from the app folder** (the folder that contains `local-run`), not from `local-run` itself. So `"cwd": "backend"` means `my-app/backend`.
+- The recipe is versioned with the app, so everyone on the team runs the app the same way.
+- Existing `.bat`, `.cmd` and `.ps1` files still work as before.
+
+## Write it human-readable
+
+A recipe is read by people as often as by LocalRun. Keep it easy to scan:
+
+- **2-space indentation, one field per line.** Every object and array is opened over several lines.
+- **Fields in a steady order:** `$schema`, `name`, `description`, `path`, `env`, `checks`, `setup`, `services`, `profiles`, `open`, `message`. Inside a service: `name`, `cwd`, `run`, `port`, `shared`, `ready`, `when`, `stop`.
+- **A `name` on every check, step and service.** It is what the card, the logs and the error messages show.
+- **A `fix` on every check**, in plain words.
+- **Forward slashes in paths:** `C:/laragon/bin`, not `C:\\laragon\\bin`.
 
 ## The smallest recipe
+
+`my-app/local-run/startapp.json`:
 
 ```json
 {
   "name": "My API",
   "services": [
-    { "name": "api", "run": "npm run dev", "port": 3000 }
+    {
+      "name": "api",
+      "run": "npm run dev",
+      "port": 3000
+    }
   ]
 }
 ```
 
-LocalRun runs `npm run dev` in the recipe's folder, waits until port 3000 is listening, and shows the project as Running. Stop ends the command and everything it started.
+LocalRun runs `npm run dev` in the app folder, waits until port 3000 is listening, and shows the project as Running. Stop ends the command and everything it started.
 
 ## How a run works
 
@@ -34,7 +66,7 @@ Every command runs through `cmd.exe` in its own hidden process. Its output goes 
 | `$schema` | string | Optional. Use `https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json` for autocomplete and validation in VS Code. |
 | `name` | string | Project name, used as the default title. |
 | `description` | string | Free text. |
-| `root` | string | Folder that relative paths start from. Default: the recipe's folder. Useful when the recipe is kept outside the project. |
+| `root` | string | Folder that relative paths start from. Default: the app folder (the parent of `local-run`). Rarely needed: only when the recipe runs something that lives elsewhere. |
 | `path` | string[] | Folders put **in front of PATH** for every command, e.g. a specific PHP or Node version. Wildcards pick the highest match: `C:/laragon/bin/php/php-7.4*`. |
 | `env` | object | Environment variables for every command. |
 | `profiles` | object | Named modes, such as `lan` or `seed`. See Profiles. |
@@ -102,16 +134,41 @@ Add `"timeout": 120` to any of them (seconds, default 60).
 
 Example, "run composer only if vendor is missing or the lock file changed":
 ```json
-"when": { "any": [ { "missing": "vendor/autoload.php" }, { "newer": ["composer.lock", "vendor/composer/installed.json"] } ] }
+{
+  "name": "composer install",
+  "run": "composer install --no-interaction",
+  "when": {
+    "any": [
+      {
+        "missing": "vendor/autoload.php"
+      },
+      {
+        "newer": [
+          "composer.lock",
+          "vendor/composer/installed.json"
+        ]
+      }
+    ]
+  }
+}
 ```
 
 ### Profiles
 ```json
 "profiles": {
-  "lan":  { "description": "Reachable from a phone on the same Wi-Fi",
-            "env": { "HOST": "0.0.0.0" }, "open": ["http://${LAN_IP}:5173"],
-            "message": "On your phone open http://${LAN_IP}:5173" },
-  "seed": { "description": "Reset and seed the database first" }
+  "lan": {
+    "description": "Reachable from a phone on the same Wi-Fi",
+    "env": {
+      "HOST": "0.0.0.0"
+    },
+    "open": [
+      "http://${LAN_IP}:5173"
+    ],
+    "message": "On your phone open http://${LAN_IP}:5173"
+  },
+  "seed": {
+    "description": "Reset and seed the database first"
+  }
 }
 ```
 A profile can add `env`, `open` and `message`. Steps and services opt in or out with `"when": { "profile": "seed" }` or `"when": { "notProfile": "lan" }`. With profiles defined, the card gets a **▾** button next to **Run** for choosing one.
@@ -119,7 +176,7 @@ A profile can add `env`, `open` and `message`. Steps and services opt in or out 
 ### Variables (in commands, paths, env, urls, message)
 | Variable | Value |
 |---|---|
-| `${ROOT}` | the recipe root folder |
+| `${ROOT}` | the app folder (the parent of `local-run`) |
 | `${LAN_IP}` | this PC's address on the local network (the adapter with a default gateway) |
 | `${PROFILE}` | the profile name, or empty |
 | `${env:NAME}` | an environment variable |
@@ -136,4 +193,4 @@ Inside `run` commands you can also use environment variables the normal cmd way,
 7. **Mobile apps:** Android works (emulator + `flutter run` / `npx react-native run-android`). **iOS simulators need macOS**, so on Windows use a web or Android target.
 
 ## Writing a recipe with an AI assistant
-In LocalRun open **Guide → Copy AI prompt**, paste it into any AI assistant together with the project's key files (`package.json`, `composer.json`, `*.csproj`, `pyproject.toml`, `docker-compose.yml`, `.env.example`, the README's "run locally" section), and save the answer as `localrun.json`.
+In LocalRun open **Recipe guide → Copy AI prompt**, paste it into any AI assistant together with the project's key files (`package.json`, `composer.json`, `*.csproj`, `pyproject.toml`, `docker-compose.yml`, `.env.example`, the README's "run locally" section), and save the answer as `local-run/startapp.json` in the app folder.

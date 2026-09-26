@@ -2,11 +2,24 @@
   "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
   "name": "Docker Compose stack",
   "checks": [
-    { "name": "Docker running", "command": "docker info --format {{.ServerVersion}}", "fix": "Start Docker Desktop" }
+    {
+      "name": "Docker running",
+      "command": "docker info --format {{.ServerVersion}}",
+      "fix": "Start Docker Desktop"
+    }
   ],
   "services": [
-    { "name": "stack", "run": "docker compose up", "stop": "docker compose down",
-      "ready": { "url": "http://127.0.0.1:8080", "timeout": 300 } }
+    {
+      "name": "stack",
+      "run": "docker compose up",
+      "ready": {
+        "url": "http://127.0.0.1:8080",
+        "timeout": 300
+      },
+      "stop": "docker compose down"
+    }
   ],
-  "open": ["http://localhost:8080"]
+  "open": [
+    "http://localhost:8080"
+  ]
 }

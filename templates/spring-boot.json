@@ -2,11 +2,25 @@
   "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
   "name": "Spring Boot",
   "checks": [
-    { "name": "Java 17+", "command": "java -version", "match": "version \"(1[7-9]|[2-9][0-9])", "fix": "Install JDK 17 or newer" }
+    {
+      "name": "Java 17+",
+      "command": "java -version",
+      "match": "version \"(1[7-9]|[2-9][0-9])",
+      "fix": "Install JDK 17 or newer"
+    }
   ],
   "services": [
-    { "name": "app", "run": "mvnw.cmd spring-boot:run", "port": 8080,
-      "ready": { "log": "Started .* in [0-9.]+ seconds", "timeout": 240 } }
+    {
+      "name": "app",
+      "run": "mvnw.cmd spring-boot:run",
+      "port": 8080,
+      "ready": {
+        "log": "Started .* in [0-9.]+ seconds",
+        "timeout": 240
+      }
+    }
   ],
-  "open": ["http://localhost:8080"]
+  "open": [
+    "http://localhost:8080"
+  ]
 }

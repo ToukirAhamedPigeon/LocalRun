@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
-  "title": "LocalRun recipe (localrun.json)",
+  "title": "LocalRun recipe (local-run/startapp.json)",
   "description": "How LocalRun starts a project: checks, setup steps and services. See docs/recipe-format.md.",
   "type": "object",
   "required": ["services"],

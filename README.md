@@ -28,8 +28,8 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 ---
 
 ## Features
-- ⭐ **Recipes (`localrun.json`):** describe how a project starts (checks, setup steps, services, readiness, profiles) and LocalRun runs it. It starts services in order, waits until each one is ready, keeps a log per service, and stops everything cleanly. Any stack: PHP, Python, Node, .NET, Java, Docker, Android. See [Recipes](#recipes).
-- A **Recipe guide** inside the app, with the full rules, 12 ready-made templates, *Save as localrun.json*, and a *Copy AI prompt* button, so an AI assistant can write the recipe for you.
+- ⭐ **Recipes (`local-run/startapp.json` in each app folder):** describe how a project starts (checks, setup steps, services, readiness, profiles) and LocalRun runs it. It starts services in order, waits until each one is ready, keeps a log per service, and stops everything cleanly. Any stack: PHP, Python, Node, .NET, Java, Docker, Android. See [Recipes](#recipes).
+- A **Recipe guide** inside the app, with the full rules, 12 ready-made templates, *Save into an app folder*, and a *Copy AI prompt* button, so an AI assistant can write the recipe for you.
 - Add, edit and remove projects (title + recipe or command file). You can also drag a file onto the window to add it.
 - **Run** opens the command in its own console window, started from the project's folder.
 - A running project glows and shows **Stop**, which closes the console and every process it started.
@@ -52,12 +52,24 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 > **"Windows protected your PC"?** The installer is not code-signed, so Microsoft Defender SmartScreen warns about it the first time. Click **More info → Run anyway**.
 
 ### Recipes
-A recipe is a `localrun.json` file in the project folder. The smallest one:
+Every app keeps its recipe inside its own folder, at `local-run/startapp.json`. Relative paths start from the app folder. Keep it human-readable: 2-space indentation, one field per line. The smallest one:
+
+```
+my-app/
+└── local-run/
+    └── startapp.json
+```
 
 ```json
 {
   "name": "My API",
-  "services": [ { "name": "api", "run": "npm run dev", "port": 3000 } ]
+  "services": [
+    {
+      "name": "api",
+      "run": "npm run dev",
+      "port": 3000
+    }
+  ]
 }
 ```
 
@@ -66,7 +78,7 @@ A real one adds **checks** (with a fix hint), **setup** steps that run only when
 - Full rules: [docs/recipe-format.md](docs/recipe-format.md), also shown in the app under **Recipe guide → All the rules**.
 - Templates: [templates/](templates) for Vite, FastAPI + Vite, Laravel on Laragon, NestJS + PostgreSQL, Django, ASP.NET Core, Spring Boot, Docker Compose, Flutter (Android), React Native (Android), desktop apps, and two projects together.
 - Editor support: add `"$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json"` for autocomplete and validation in VS Code.
-- With AI: **Recipe guide → Copy AI prompt**, paste it into any assistant with the project's key files, and save the answer as `localrun.json`.
+- With AI: **Recipe guide → Copy AI prompt**, paste it into any assistant with the project's key files, and save the answer as `local-run/startapp.json` in the app folder.
 
 Profiles appear under the **▾** button next to **Run**. The **Logs** button shows each service's output. When a run fails, LocalRun says which step failed, shows the last lines of its log, and stops what it had started.
 

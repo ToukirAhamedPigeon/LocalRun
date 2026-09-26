@@ -1,14 +1,62 @@
 [
-  { "file": "node-vite.json", "title": "Vite web app", "description": "React, Vue or Svelte with Vite. Installs packages only when needed. The 'lan' profile makes it reachable from a phone." },
-  { "file": "fastapi-vite.json", "title": "FastAPI + Vite + Redis", "description": "A Python API and a web front end with a shared Redis. The 'lan' profile binds both to the network." },
-  { "file": "laravel-laragon.json", "title": "Laravel on Laragon", "description": "Pins Laragon's PHP and MySQL versions, installs only when needed, and migrates once MySQL is up." },
-  { "file": "nestjs-postgres.json", "title": "NestJS + PostgreSQL", "description": "PostgreSQL in Docker (or your own, shared), migrations as a task, then the API." },
-  { "file": "django.json", "title": "Django", "description": "Checks the virtual environment, runs migrations as a task, then runserver." },
-  { "file": "aspnet-core.json", "title": "ASP.NET Core", "description": "dotnet watch run on a fixed URL. Ready when Swagger answers." },
-  { "file": "spring-boot.json", "title": "Spring Boot", "description": "Maven wrapper. Ready when the log says the application started." },
-  { "file": "docker-compose.json", "title": "Docker Compose", "description": "docker compose up in the foreground, and docker compose down on Stop." },
-  { "file": "flutter-android.json", "title": "Flutter (Android)", "description": "Boots an Android emulator, waits for it, then runs the app. iOS needs macOS." },
-  { "file": "react-native-android.json", "title": "React Native (Android)", "description": "Emulator, then the Metro bundler, then installs the app as a task." },
-  { "file": "desktop-app.json", "title": "Desktop app", "description": "Any GUI app without a port (Electron, WPF, WinForms). Ready after a short delay." },
-  { "file": "two-projects.json", "title": "Two projects together", "description": "One click for two apps that share a database." }
+  {
+    "file": "node-vite.json",
+    "title": "Vite web app",
+    "description": "React, Vue or Svelte with Vite. Installs packages only when needed. The 'lan' profile makes it reachable from a phone."
+  },
+  {
+    "file": "fastapi-vite.json",
+    "title": "FastAPI + Vite + Redis",
+    "description": "A Python API and a web front end with a shared Redis. The 'lan' profile binds both to the network."
+  },
+  {
+    "file": "laravel-laragon.json",
+    "title": "Laravel on Laragon",
+    "description": "Pins Laragon's PHP and MySQL versions, installs only when needed, and migrates once MySQL is up."
+  },
+  {
+    "file": "nestjs-postgres.json",
+    "title": "NestJS + PostgreSQL",
+    "description": "PostgreSQL in Docker (or your own, shared), migrations as a task, then the API."
+  },
+  {
+    "file": "django.json",
+    "title": "Django",
+    "description": "Checks the virtual environment, runs migrations as a task, then runserver."
+  },
+  {
+    "file": "aspnet-core.json",
+    "title": "ASP.NET Core",
+    "description": "dotnet watch run on a fixed URL. Ready when Swagger answers."
+  },
+  {
+    "file": "spring-boot.json",
+    "title": "Spring Boot",
+    "description": "Maven wrapper. Ready when the log says the application started."
+  },
+  {
+    "file": "docker-compose.json",
+    "title": "Docker Compose",
+    "description": "docker compose up in the foreground, and docker compose down on Stop."
+  },
+  {
+    "file": "flutter-android.json",
+    "title": "Flutter (Android)",
+    "description": "Boots an Android emulator, waits for it, then runs the app. iOS needs macOS."
+  },
+  {
+    "file": "react-native-android.json",
+    "title": "React Native (Android)",
+    "description": "Emulator, then the Metro bundler, then installs the app as a task."
+  },
+  {
+    "file": "desktop-app.json",
+    "title": "Desktop app",
+    "description": "Any GUI app without a port (Electron, WPF, WinForms). Ready after a short delay."
+  },
+  {
+    "file": "two-projects.json",
+    "title": "Two projects together",
+    "description": "One click for two apps that share a database."
+  }
 ]

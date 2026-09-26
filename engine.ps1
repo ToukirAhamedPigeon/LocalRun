@@ -1,5 +1,5 @@
 # LocalRun recipe engine.
-# Reads a localrun.json recipe and runs it: checks -> setup steps -> services -> running.
+# Reads a recipe (<app>/local-run/startapp.json) and runs it: checks -> setup steps -> services -> running.
 # No UI here. LocalRun.ps1 calls New-Run, then Invoke-RunTick every half second, and reads
 # $run.Status / $run.Phase. Tests can drive the same functions headless.
 #
@@ -249,9 +249,29 @@ function Stop-PortOwner([int]$port, [datetime]$since) {
 }
 
 # ---------------------------------------------------------------- a run
+# The convention is <app>\local-run\startapp.json. Relative paths in a recipe start from the
+# app folder, so a recipe inside a "local-run" folder gets its parent as root.
+$script:RecipeFolder = 'local-run'
+$script:RecipeFile = 'startapp.json'
+
+function Get-RecipeRoot([string]$recipePath) {
+    $dir = Split-Path -Parent $recipePath
+    if ((Split-Path -Leaf $dir) -eq $script:RecipeFolder) { return (Split-Path -Parent $dir) }
+    return $dir
+}
+
+# A folder given instead of a file resolves to its local-run\startapp.json, when there is one.
+function Resolve-RecipeInput([string]$path) {
+    if ($path -and (Test-Path -LiteralPath $path -PathType Container)) {
+        $candidate = Join-Path $path (Join-Path $script:RecipeFolder $script:RecipeFile)
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    return $path
+}
+
 function New-Run([string]$projectId, [string]$recipePath, [string]$profile = '') {
     $read = Read-Recipe $recipePath
-    $recipeDir = Split-Path -Parent $recipePath
+    $recipeDir = Get-RecipeRoot $recipePath
     $logDir = Join-Path $script:EngineLogRoot $projectId
     try {
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null

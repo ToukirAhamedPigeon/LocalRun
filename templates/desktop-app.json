@@ -2,10 +2,23 @@
   "$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json",
   "name": "Desktop app (Electron, WPF, WinForms, any GUI)",
   "setup": [
-    { "name": "npm ci", "run": "npm ci", "when": { "missing": "node_modules", "exists": "package.json" } }
+    {
+      "name": "npm ci",
+      "run": "npm ci",
+      "when": {
+        "missing": "node_modules",
+        "exists": "package.json"
+      }
+    }
   ],
   "services": [
-    { "name": "app", "run": "npm start", "ready": { "delay": 3 } }
+    {
+      "name": "app",
+      "run": "npm start",
+      "ready": {
+        "delay": 3
+      }
+    }
   ],
   "message": "For a .NET desktop app use: dotnet run --project src\\MyApp"
 }
