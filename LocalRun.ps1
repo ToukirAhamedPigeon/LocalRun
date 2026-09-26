@@ -1404,6 +1404,9 @@ $procTimer.Add_Tick({
                 Update-Counts
                 Show-Toast "$title - $($ev.Text)" 'error'
             }
+            'warning' {
+                Show-Toast "$title - $($ev.Text)" 'info'
+            }
         }
     }
     foreach ($id in @($script:Running.Keys)) {

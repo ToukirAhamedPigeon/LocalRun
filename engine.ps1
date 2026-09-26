@@ -8,11 +8,11 @@
 $script:EngineLogRoot = Join-Path $env:LOCALAPPDATA 'LocalRun\logs'
 
 $script:RecipeTopKeys   = @('$schema', 'name', 'description', 'root', 'path', 'env', 'profiles', 'checks', 'setup', 'services', 'open', 'message')
-$script:ServiceKeys     = @('name', 'run', 'cwd', 'env', 'shell', 'port', 'shared', 'ready', 'when', 'stop', 'description')
+$script:ServiceKeys     = @('name', 'run', 'cwd', 'env', 'shell', 'port', 'shared', 'ready', 'when', 'stop', 'optional', 'description')
 $script:StepKeys        = @('name', 'run', 'cwd', 'env', 'shell', 'when', 'timeout', 'description')
 $script:CheckKeys       = @('name', 'exists', 'command', 'match', 'portFree', 'portBusy', 'fix', 'warn', 'when')
 $script:ReadyKeys       = @('port', 'url', 'status', 'log', 'command', 'match', 'delay', 'exit', 'timeout')
-$script:WhenKeys        = @('profile', 'notProfile', 'exists', 'missing', 'newer', 'portFree', 'portBusy', 'any')
+$script:WhenKeys        = @('profile', 'notProfile', 'exists', 'missing', 'newer', 'portFree', 'portBusy', 'any', 'all')
 
 # ---------------------------------------------------------------- reading + validation
 function Get-Names($obj) {
@@ -147,6 +147,12 @@ function Resolve-RecipePath([string]$path, $ctx, [switch]$Pick) {
     return $p
 }
 
+# An empty path (e.g. an unset ${env:NAME}) never exists - it must not resolve to the root folder.
+function Test-RecipePathExists([string]$path, $ctx) {
+    if (-not (Expand-RecipeText $path $ctx)) { return $false }
+    return Test-Path -Path (Resolve-RecipePath $path $ctx)
+}
+
 function Test-When($when, $ctx) {
     if ($null -eq $when) { return $true }
     if ($when.any) {
@@ -154,10 +160,13 @@ function Test-When($when, $ctx) {
         foreach ($w in @($when.any)) { if (Test-When $w $ctx) { $hit = $true; break } }
         if (-not $hit) { return $false }
     }
+    if ($when.all) {
+        foreach ($w in @($when.all)) { if (-not (Test-When $w $ctx)) { return $false } }
+    }
     if ($when.profile -and $when.profile -ne $ctx.Profile) { return $false }
     if ($when.notProfile -and $when.notProfile -eq $ctx.Profile) { return $false }
-    if ($when.exists -and -not (Test-Path -Path (Resolve-RecipePath $when.exists $ctx))) { return $false }
-    if ($when.missing -and (Test-Path -Path (Resolve-RecipePath $when.missing $ctx))) { return $false }
+    if ($when.exists -and -not (Test-RecipePathExists $when.exists $ctx)) { return $false }
+    if ($when.missing -and (Test-RecipePathExists $when.missing $ctx)) { return $false }
     if ($when.newer) {
         $pair = @($when.newer)
         $a = Resolve-RecipePath $pair[0] $ctx
@@ -183,6 +192,8 @@ function Get-LogTail([string]$file, [int]$lines = 15) {
             if ($fs.Length -gt $max) { [void]$fs.Seek(-$max, 'End') }
             $text = (New-Object System.IO.StreamReader($fs)).ReadToEnd()
         } finally { $fs.Close() }
+        # Dev servers (uvicorn, vite, npm) colour their output; drop the ANSI codes for display.
+        $text = [regex]::Replace($text, "\x1B\[[0-9;?]*[A-Za-z]", '')
         $all = $text -split "\r?\n" | Where-Object { $_ -ne '' }
         return (@($all) | Select-Object -Last $lines) -join "`n"
     } catch { return '' }
@@ -302,6 +313,20 @@ function New-Run([string]$projectId, [string]$recipePath, [string]$profile = '')
     return $run
 }
 
+# A service marked "optional" that fails is skipped with a warning; any other fails the run.
+function Invoke-ServiceFailure($run, $svc, [string]$reason, [string]$logFile) {
+    if ($svc.Def.optional) {
+        if ($svc.Proc) { Stop-ProcessTree $svc.Proc; $svc.Proc = $null }
+        $svc.Started = $true; $svc.Ready = $true; $svc.Skipped = $true
+        $msg = "$reason Skipped, because it is optional."
+        Write-EngineLog $run "warning: $msg"
+        [void]$run.Warnings.Add($msg)
+        return @{ Type = 'warning'; Text = $msg }
+    }
+    Set-RunFailed $run $reason $logFile
+    return @{ Type = 'failed'; Text = $run.Error }
+}
+
 function Set-RunFailed($run, [string]$reason, [string]$logFile) {
     $run.Phase = 'failed'
     $run.Error = $reason
@@ -321,6 +346,8 @@ function Stop-RunProcesses($run) {
             # The service's own shutdown first (e.g. docker compose down); the tree kill is the fallback.
             Write-EngineLog $run "stop: $($s.Name) -> $($s.Def.stop)"
             [void](Invoke-CheckCommand $run $s.Def.stop 60000 $s.Def.cwd (Get-CommandEnv $run $s.Def.env))
+            # Give it time to finish shutting down (e.g. a database flushing) before anything is forced.
+            try { [void]$s.Proc.WaitForExit(15000) } catch {}
         }
         Stop-ProcessTree $s.Proc
         if ($s.Port) { Stop-PortOwner $s.Port $run.StartedAt }
@@ -498,7 +525,7 @@ function Invoke-RunTick($run) {
                 [void]$run.Services.Add([pscustomobject]@{
                     Name = [string]$def.name; Def = $def; Port = $port; Proc = $null; External = $false
                     Started = $false; Ready = $false; StartedAt = $null; LogFile = (Join-Path $run.LogDir ((Get-SafeName $def.name) + '.log'))
-                    LastProbe = $null; Exited = $false; IsTask = $false
+                    LastProbe = $null; Exited = $false; IsTask = $false; Skipped = $false
                 })
             }
             if ($run.Services.Count -eq 0) { Set-RunFailed $run 'No service applies (every service has a condition that is not met).' $run.EngineLog; return @{ Type = 'failed'; Text = $run.Error } }
@@ -520,8 +547,7 @@ function Invoke-RunTick($run) {
                     try {
                         $svc.Proc = Start-RecipeProcess $run $svc.Def.run $svc.Def.cwd (Get-CommandEnv $run $svc.Def.env) $svc.LogFile $svc.Def.shell
                     } catch {
-                        Set-RunFailed $run "'$($svc.Name)' could not start: $($_.Exception.Message)" $svc.LogFile
-                        return @{ Type = 'failed'; Text = $run.Error }
+                        return (Invoke-ServiceFailure $run $svc "'$($svc.Name)' could not start: $($_.Exception.Message)" $svc.LogFile)
                     }
                     $svc.Started = $true
                     $svc.StartedAt = Get-Date
@@ -557,14 +583,12 @@ function Invoke-RunTick($run) {
                     Write-EngineLog $run "ready: $($svc.Name) ($([int]((Get-Date) - $svc.StartedAt).TotalSeconds) s)"
                 } else {
                     if ($svc.Proc -and $svc.Proc.HasExited) {
-                        Set-RunFailed $run "'$($svc.Name)' stopped before it was ready (exit code $($svc.Proc.ExitCode))." $svc.LogFile
-                        return @{ Type = 'failed'; Text = $run.Error }
+                        return (Invoke-ServiceFailure $run $svc "'$($svc.Name)' stopped before it was ready (exit code $($svc.Proc.ExitCode))." $svc.LogFile)
                     }
                     $limit = if ($svc.Def.ready -and $svc.Def.ready.timeout) { [double]$svc.Def.ready.timeout } else { 60 }
                     $secs = [int]((Get-Date) - $svc.StartedAt).TotalSeconds
                     if ($secs -gt $limit) {
-                        Set-RunFailed $run "'$($svc.Name)' was not ready after $limit seconds." $svc.LogFile
-                        return @{ Type = 'failed'; Text = $run.Error }
+                        return (Invoke-ServiceFailure $run $svc "'$($svc.Name)' was not ready after $limit seconds." $svc.LogFile)
                     }
                     $run.Status = "Waiting for $($svc.Name) ($secs s)"
                     return $null

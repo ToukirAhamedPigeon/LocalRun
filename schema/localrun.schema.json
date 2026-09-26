@@ -26,7 +26,8 @@
         "newer": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2, "description": "[a, b]: true when a is newer than b, or b does not exist." },
         "portFree": { "$ref": "#/definitions/port" },
         "portBusy": { "$ref": "#/definitions/port" },
-        "any": { "type": "array", "items": { "$ref": "#/definitions/when" }, "description": "At least one of these conditions must hold." }
+        "any": { "type": "array", "items": { "$ref": "#/definitions/when" }, "description": "At least one of these conditions must hold." },
+        "all": { "type": "array", "items": { "$ref": "#/definitions/when" }, "description": "Every one of these conditions must hold." }
       }
     },
     "ready": {
@@ -60,6 +61,7 @@
         "shared": { "type": "boolean", "description": "Shared infrastructure: if the port is already listening, use it and never stop it. Needs port." },
         "ready": { "$ref": "#/definitions/ready" },
         "stop": { "type": "string", "description": "Command run on Stop before the process is ended, e.g. docker compose down." },
+        "optional": { "type": "boolean", "description": "If it cannot start or become ready, warn and carry on instead of failing the run." },
         "when": { "$ref": "#/definitions/when" }
       }
     },

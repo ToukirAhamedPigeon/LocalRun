@@ -87,7 +87,8 @@ Every command runs through `cmd.exe` in its own hidden process. Its output goes 
 | `port` | number | The port it listens on. It is used to wait for readiness (if no `ready` is given), to detect a port clash, and to clean up on Stop. |
 | `shared` | boolean | For shared infrastructure (MySQL, Redis, PostgreSQL). If `port` is **already listening**, LocalRun uses what is there, starts nothing, and never stops it. Needs `port`. |
 | `ready` | object | How to know it is ready. See Readiness. Without it: ready when `port` listens, or immediately if there is no port. |
-| `stop` | string | Optional command run on Stop before the process is ended, e.g. `docker compose down`. |
+| `stop` | string | Optional command run on Stop, e.g. `docker compose down` or `mysqladmin shutdown`. LocalRun then waits up to 15 s for the service to exit on its own before ending it. |
+| `optional` | boolean | If it cannot start or does not become ready, LocalRun warns and carries on instead of failing the run. For extras such as a cache the app can live without. |
 | `when` | object | Only run this service if the condition holds. See Conditions. |
 
 ### Readiness (`ready`): use one kind
@@ -131,6 +132,7 @@ Add `"timeout": 120` to any of them (seconds, default 60).
 | `newer` | `["a", "b"]`: `a` is newer than `b`, or `b` does not exist |
 | `portFree` / `portBusy` | a port is free / in use |
 | `any` | a list of conditions; at least one must hold |
+| `all` | a list of conditions; every one must hold (useful for "none of these exist": `[{ "missing": "a" }, { "missing": "b" }]`) |
 
 Example, "run composer only if vendor is missing or the lock file changed":
 ```json
