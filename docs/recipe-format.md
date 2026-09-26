@@ -215,5 +215,35 @@ Inside `run` commands you can also use environment variables the normal cmd way,
 6. **Phone access:** bind to `0.0.0.0` in a `lan` profile (Vite `--host`, `php artisan serve --host 0.0.0.0`, uvicorn `--host 0.0.0.0`, `dotnet run --urls http://0.0.0.0:5000`). Windows may ask once to allow the app through the firewall.
 7. **Mobile apps:** Android works (emulator + `flutter run` / `npx react-native run-android`). **iOS simulators need macOS**, so on Windows use a web or Android target.
 
+## Making a recipe from commands
+Most projects already have a way to start them: a `start-dev.bat`, a `run.ps1`, or a few commands typed in separate terminals. In LocalRun press **From commands**, then either:
+
+- **Load a command file** (`.bat`, `.cmd`, `.ps1`), or
+- **paste the commands**, one terminal per block, with a blank line between terminals. Terminal prompts such as `PS D:\app\backend>` are fine: the folder in the prompt is used.
+
+Choose the **app folder** and press **Convert**. LocalRun reads the commands (it never runs them) and writes a draft on the right, with notes underneath. Check the notes, edit the draft if needed, and press **Save and add project**: the draft is validated and saved as `local-run/startapp.json`.
+
+What it understands:
+
+| In the commands | In the recipe |
+|---|---|
+| `cd`, `pushd`, `Set-Location`, the folder in a prompt | `cwd` of the next commands |
+| `set X=1`, `$env:X = "1"`, `export X=1` | `env` (on the service, or at the top when every command shares it) |
+| `set PATH=C:\php;%PATH%`, activating a virtualenv | `path` |
+| installers and one-off commands (`npm install`, `composer install`, `pip install`, migrations) | `setup` steps, guarded with `when` so they run only when needed |
+| dev servers, databases, workers, tunnels (`npm run dev`, `php artisan serve`, `uvicorn`, `dotnet run`, `mysqld`, `redis-server`, `docker compose up`) | `services`, with the `port` from flags, `package.json`, `vite.config`, `launchSettings.json`, `.env` or the framework's default |
+| `start "" cmd /k "..."`, `Start-Process`, `wt` | one service per window |
+| `timeout /t 5`, `Start-Sleep 5` after a service without a port | `"ready": { "delay": 5 }` |
+| `if not exist node_modules npm install`, `if (-not (Test-Path x)) { ... }` | `"when": { "missing": ... }` |
+| `start http://localhost:3000` | `open` |
+| a one-off after a service, or a migration after a pasted database | a task: `"ready": { "exit": true }` |
+| PowerShell switch parameters: `if ($Seed) { ... }`, `if (-not $NoBrowser) { ... }` | profiles (`seed`, `no-browser`); `$env:` set under a switch becomes that profile's `env` |
+| `if (-not (Test-Path x)) { throw "..." }` | a check, with the throw message as its `fix` |
+| the script's own helper around `Start-Process` (e.g. `Start-Service 'api' 'API' 8000 $python @(...) $dir`) | one service per call, with the name and port from its arguments; `shared` when the helper leaves a busy port alone |
+
+Databases and caches become `shared`. `docker compose up -d` becomes `docker compose up` with `"stop": "docker compose down"`, so Stop really stops it. Paths inside the app folder become `${ROOT}` or relative paths, so the recipe works on any PC.
+
+Scripts with a lot of logic (functions, loops, `if / else`, parameters) cannot be converted exactly by rules. The notes say how many lines were skipped. Press **Copy AI prompt**: it copies the recipe rules, the script and LocalRun's draft, and asks for an exact conversion. Paste the AI's answer into the draft, and **Save** checks it before writing it.
+
 ## Writing a recipe with an AI assistant
 In LocalRun open **Recipe guide → Copy AI prompt**, paste it into any AI assistant together with the project's key files (`package.json`, `composer.json`, `*.csproj`, `pyproject.toml`, `docker-compose.yml`, `.env.example`, the README's "run locally" section), and save the answer as `local-run/startapp.json` in the app folder.

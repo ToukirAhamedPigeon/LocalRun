@@ -30,6 +30,7 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 ## Features
 - ⭐ **Recipes (`local-run/startapp.json` in each app folder):** describe how a project starts (checks, setup steps, services, readiness, profiles) and LocalRun runs it. It starts services in order, waits until each one is ready, keeps a log per service, and stops everything cleanly. Any stack: PHP, Python, Node, .NET, Java, Docker, Android. See [Recipes](#recipes).
 - A **Recipe guide** inside the app, with the full rules, 12 ready-made templates, *Save into an app folder*, and a *Copy AI prompt* button, so an AI assistant can write the recipe for you.
+- ⭐ **From commands:** turn a `.bat` / `.cmd` / `.ps1`, or the commands you type in separate terminals, into a recipe. LocalRun reads the commands (it never runs them), recognises dev servers, installers, databases and tools across stacks, works out ports from flags, `package.json`, `vite.config`, `launchSettings.json`, `.env` and framework defaults, and writes a human-readable draft with notes on anything it guessed. It then saves it as `local-run/startapp.json`. For scripts full of logic, *Copy AI prompt* hands the rules, the script and the draft to any AI assistant for an exact conversion.
 - **Recipes and command files side by side:** a project can use a `.json` recipe or a `.bat` / `.cmd` / `.ps1` script. Paste or drop an app folder and LocalRun finds `local-run/startapp.json` (or `startapp.ps1` / `.bat` / `.cmd`). Files in `local-run/` run from the app folder.
 - Add, edit and remove projects (title + recipe or command file). You can also drag a file or an app folder onto the window to add it.
 - **Run** opens the command in its own console window, started from the project's folder.
@@ -80,6 +81,7 @@ A real one adds **checks** (with a fix hint), **setup** steps that run only when
 - Templates: [templates/](templates) for Vite, FastAPI + Vite, Laravel on Laragon, NestJS + PostgreSQL, Django, ASP.NET Core, Spring Boot, Docker Compose, Flutter (Android), React Native (Android), desktop apps, and two projects together.
 - Editor support: add `"$schema": "https://raw.githubusercontent.com/ToukirAhamedPigeon/LocalRun/main/schema/localrun.schema.json"` for autocomplete and validation in VS Code.
 - With AI: **Recipe guide → Copy AI prompt**, paste it into any assistant with the project's key files, and save the answer as `local-run/startapp.json` in the app folder.
+- From commands: **From commands** in the header (or *Make one from commands* in the project dialog). Load the script you start the app with, or paste the commands you run, one terminal per block. See [Making a recipe from commands](docs/recipe-format.md#making-a-recipe-from-commands).
 
 Profiles appear under the **▾** button next to **Run**. The **Logs** button shows each service's output. When a run fails, LocalRun says which step failed, shows the last lines of its log, and stops what it had started.
 
@@ -160,6 +162,7 @@ The app is one PowerShell process with one WPF UI thread. It has four logical la
 LocalRun/
 ├── LocalRun.ps1        # the application (UI, data, process control)
 ├── engine.ps1          # the recipe engine: checks, setup, services, readiness, logs, stop (no UI)
+├── converter.ps1       # commands (.bat / .ps1 / pasted) -> recipe draft, with notes (no UI)
 ├── docs/
 │   ├── recipe-format.md  # the recipe rules (also the in-app guide and the AI prompt)
 │   └── engine-plan.md    # roadmap: detectors + a small local model to write recipes
@@ -277,6 +280,7 @@ Consoles stay open (`/k`, `-NoExit`) so logs remain visible and `Ctrl+C` still w
 | cards | `New-Card`, `Render-Cards`, `Set-CardState`, `Update-Counts` |
 | run / stop | `Start-Project`, `Stop-Project`, process-watcher timer |
 | dialogs | `Open-Overlay`, `Close-Overlay`, `Show-Editor`, `Save-Editor`, `Show-DeleteConfirm`, `Confirm-Delete` |
+| commands to recipe | `Show-Converter`, `Import-ConvFile`, `Invoke-Convert`, `Get-ConvertPrompt`, `Save-Converted` (the conversion itself is `Convert-CommandsToRecipe` in `converter.ps1`) |
 | about + links | `Open-Link`, copyright year, social icon and About dialog wiring (`$Links`, `$AppVersion`) |
 | wiring | button, keyboard, drag-and-drop and window events; DWM styling; startup animations |
 
@@ -322,6 +326,7 @@ All team members use multi-factor authentication for GitHub and SignPath.
 ## Roadmap
 **One click, any stack.** Instead of a start script per project, a short per-project *recipe* run by a shared engine inside LocalRun. See [docs/engine-plan.md](docs/engine-plan.md).
 - ✅ **1.2.0:** the recipe format, the engine, the in-app guide, templates and the AI prompt.
+- ✅ **1.3.0:** *From commands*: a recipe drafted from a start script or pasted terminal commands.
 - Next: detectors that draft a recipe from a project's files, then a small, free, fine-tuned local model for the rest, with the whole install kept under 500 MB.
 
 ## License

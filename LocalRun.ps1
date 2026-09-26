@@ -14,7 +14,7 @@ $DbFile     = Join-Path $DataDir 'localrun.db'
 $LogFile    = Join-Path $DataDir 'localrun.log'
 $JsonFile   = Join-Path $DataDir 'projects.json'                          # v1.0 storage, imported once
 $LegacyFile = Join-Path $env:APPDATA 'LocalhostLauncher\projects.json'    # first prototype, imported once
-$AppVersion = '1.2.2'
+$AppVersion = '1.3.0'
 
 # Opened from the icons only - no URL is ever shown in the UI.
 $Links = @{
@@ -45,6 +45,7 @@ function Write-Log($msg) {
 
 # Recipe engine (<app>/local-run/startapp.json): checks, setup, services, readiness, logs, stop.
 . (Join-Path $AppDir 'engine.ps1')
+. (Join-Path $AppDir 'converter.ps1')
 
 # ---------------------------------------------------------------- native: window + SQLite
 Add-Type -TypeDefinition @'
@@ -607,6 +608,12 @@ $WindowXaml = @'
             <TextBlock Text="Recipe guide" Margin="8,0,0,0" VerticalAlignment="Center"/>
           </StackPanel>
         </Button>
+        <Button x:Name="BtnConvert" Style="{StaticResource GhostBtn}" Margin="10,0,0,0" ToolTip="Make a recipe from a .bat / .ps1 or from commands you paste">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+            <TextBlock Text="From commands" Margin="8,0,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
         <Button x:Name="BtnNew" Style="{StaticResource FlameBtn}" Margin="10,0,0,0">
           <StackPanel Orientation="Horizontal">
             <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
@@ -690,7 +697,7 @@ $WindowXaml = @'
             <Grid Margin="0,16,0,7">
               <TextBlock Text="RECIPE OR COMMAND FILE" Style="{StaticResource FieldLabel}" Margin="0"/>
               <TextBlock HorizontalAlignment="Right" FontSize="12">
-                <Hyperlink x:Name="LnkEditorGuide" Style="{StaticResource Link}">How do I write a recipe?</Hyperlink>
+                <Hyperlink x:Name="LnkEditorConvert" Style="{StaticResource Link}">Make one from commands</Hyperlink><Run Text="   &#xB7;   " Foreground="#5E5987"/><Hyperlink x:Name="LnkEditorGuide" Style="{StaticResource Link}">How to write one</Hyperlink>
               </TextBlock>
             </Grid>
             <Grid>
@@ -801,6 +808,70 @@ $WindowXaml = @'
                 <Button x:Name="BtnGuideCopy" Style="{StaticResource GhostBtn}" Content="Copy"/>
                 <Button x:Name="BtnGuideCreate" Style="{StaticResource FlameBtn}" Content="Save into an app folder..." Margin="10,0,0,0"/>
                 <Button x:Name="BtnGuideClose" Style="{StaticResource GhostBtn}" Content="Close" Margin="10,0,0,0"/>
+              </StackPanel>
+            </Grid>
+          </Grid>
+
+          <!-- commands to recipe -->
+          <Grid x:Name="ConvertPanel" Visibility="Collapsed" Height="580">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock Text="Make a recipe from commands" FontSize="21" FontWeight="SemiBold"/>
+              <TextBlock Foreground="#8F89B8" FontSize="13" Margin="0,5,0,14" TextWrapping="Wrap"
+                         Text="Load the .bat, .cmd or .ps1 that starts the app, or paste the commands you type in your terminals, with a blank line between terminals. LocalRun reads them (it does not run them) and writes a recipe draft to check before saving."/>
+            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,0,0,14">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBlock Text="APP FOLDER" Style="{StaticResource FieldLabel}" Margin="0,0,14,0" VerticalAlignment="Center"/>
+              <TextBox x:Name="TxtConvRoot" Grid.Column="1" Style="{StaticResource Field}" FontFamily="Cascadia Mono, Consolas" FontSize="13"
+                       ToolTip="The recipe is saved as local-run\startapp.json in this folder. Relative paths start here."/>
+              <Button x:Name="BtnConvRoot" Grid.Column="2" Style="{StaticResource GhostBtn}" Height="40" Margin="8,0,0,0">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+                  <TextBlock Text="Browse" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+            </Grid>
+            <Grid Grid.Row="2">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Grid Margin="0,0,0,7">
+                  <TextBlock x:Name="ConvSourceLabel" Text="COMMANDS" Style="{StaticResource FieldLabel}" Margin="0" TextTrimming="CharacterEllipsis" MaxWidth="250" HorizontalAlignment="Left"/>
+                  <TextBlock HorizontalAlignment="Right" FontSize="12">
+                    <Hyperlink x:Name="LnkConvLoad" Style="{StaticResource Link}">Load a command file...</Hyperlink>
+                  </TextBlock>
+                </Grid>
+                <Grid Grid.Row="1">
+                  <TextBox x:Name="TxtConvInput" Style="{StaticResource CodeBox}" IsReadOnly="False" AcceptsTab="True"/>
+                  <TextBlock x:Name="ConvHint" IsHitTestVisible="False" Margin="16,14,12,0" FontFamily="Cascadia Mono, Consolas" FontSize="12.5" Foreground="#5E5987" TextWrapping="Wrap"
+                             Text="cd backend&#xA;.venv\Scripts\activate&#xA;uvicorn app.main:app --reload --port 8000&#xA;&#xA;cd frontend&#xA;npm install&#xA;npm run dev&#xA;&#xA;(one terminal per block; prompts such as PS D:\app&gt; are fine)"/>
+                </Grid>
+              </Grid>
+              <Grid Grid.Column="1" Margin="18,0,0,0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock Text="RECIPE DRAFT   (local-run/startapp.json, editable)" Style="{StaticResource FieldLabel}"/>
+                <TextBox x:Name="TxtConvOutput" Grid.Row="1" Style="{StaticResource CodeBox}" IsReadOnly="False" AcceptsTab="True" TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto"/>
+                <TextBox x:Name="TxtConvNotes" Grid.Row="2" Style="{StaticResource CodeBox}" Margin="0,10,0,0" Height="118" FontFamily="Segoe UI" FontSize="12.5" Foreground="#FFD49A"/>
+              </Grid>
+            </Grid>
+            <Grid Grid.Row="3" Margin="0,16,0,0">
+              <Button x:Name="BtnConvPrompt" Style="{StaticResource GhostBtn}" HorizontalAlignment="Left"
+                      ToolTip="Copies the recipe rules, the commands and this draft as a prompt, for an exact conversion of a script with logic in it. Paste the AI's answer into the draft, then save.">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+                  <TextBlock Text="Copy AI prompt" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnConvRun" Style="{StaticResource GhostBtn}">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+                    <TextBlock Text="Convert" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="BtnConvSave" Style="{StaticResource FlameBtn}" Content="Save and add project" Margin="10,0,0,0"/>
+                <Button x:Name="BtnConvClose" Style="{StaticResource GhostBtn}" Content="Close" Margin="10,0,0,0"/>
               </StackPanel>
             </Grid>
           </Grid>
@@ -1056,7 +1127,9 @@ foreach ($n in 'Root','Blob1','Blob2','Blob3','HeaderLogo','HeaderLogoFallback',
                'InfoVersion','InfoCopy','BtnInfoClose','BtnGuide','LnkEditorGuide','GuidePanel','GuideList','GuideTitle',
                'GuideDesc','GuideCode','BtnCopyPrompt','BtnGuideCopy','BtnGuideCreate','BtnGuideClose','LogsPanel','LogsTitle',
                'LogsStatus','LogsList','LogsText','BtnLogsFolder','BtnLogsCopy','BtnLogsClose','NoticePanel','NoticeBadge',
-               'NoticeGlyph','NoticeTitle','NoticeText','BtnNoticeAction','BtnNoticeClose') {
+               'NoticeGlyph','NoticeTitle','NoticeText','BtnNoticeAction','BtnNoticeClose','BtnConvert','LnkEditorConvert',
+               'ConvertPanel','TxtConvRoot','BtnConvRoot','ConvSourceLabel','LnkConvLoad','TxtConvInput','ConvHint','TxtConvOutput',
+               'TxtConvNotes','BtnConvPrompt','BtnConvRun','BtnConvSave','BtnConvClose') {
     Set-Variable -Name $n -Value $window.FindName($n) -Scope Script
 }
 $FlameBrush = $window.FindResource('Flame')
@@ -1427,8 +1500,8 @@ $procTimer.Add_Tick({
 
 # ---------------------------------------------------------------- dialogs
 function Open-Overlay($panel) {
-    foreach ($x in $EditPanel, $ConfirmPanel, $InfoPanel, $GuidePanel, $LogsPanel, $NoticePanel) { $x.Visibility = 'Collapsed' }
-    $Dialog.Width = if ($panel -eq $GuidePanel -or $panel -eq $LogsPanel) { 940 } elseif ($panel -eq $NoticePanel) { 640 } else { 540 }
+    foreach ($x in $EditPanel, $ConfirmPanel, $InfoPanel, $GuidePanel, $LogsPanel, $NoticePanel, $ConvertPanel) { $x.Visibility = 'Collapsed' }
+    $Dialog.Width = if ($panel -eq $GuidePanel -or $panel -eq $LogsPanel -or $panel -eq $ConvertPanel) { 940 } elseif ($panel -eq $NoticePanel) { 640 } else { 540 }
     $panel.Visibility = 'Visible'
     $script:OverlayOpen = $true
     $Toast.VerticalAlignment = 'Top'; $Toast.Margin = New-Object System.Windows.Thickness 0, 18, 0, 0
@@ -1527,6 +1600,151 @@ $spec
 docker-compose.yml, .env.example, and the README's "run locally" section. Say which ports
 you use, which database, and whether you need phone access.)
 "@
+}
+
+# ---------------------------------------------------------------- commands to recipe
+# The source of the commands: pasted text, or a command file ($script:ConvFile) whose kind
+# (bat / ps1) decides how it is read.
+$script:ConvFile = ''
+$script:ConvKind = 'paste'
+$script:ConvLoading = $false
+
+function Show-Converter([string]$file = '') {
+    $script:ConvFile = ''
+    $script:ConvKind = 'paste'
+    $TxtConvInput.Text = ''
+    $TxtConvOutput.Text = ''
+    $TxtConvNotes.Foreground = Get-Brush '#8F89B8'
+    $TxtConvNotes.Text = 'Press Convert when the commands are in. Notes about the draft show up here.'
+    $ConvSourceLabel.Text = 'COMMANDS   (pasted)'
+    if ($file -and (Test-Path -LiteralPath $file -PathType Leaf)) { Import-ConvFile $file }
+    Open-Overlay $ConvertPanel
+    if (-not $file) { $window.Dispatcher.BeginInvoke([System.Windows.Threading.DispatcherPriority]::Input, [action]{ $TxtConvInput.Focus() }) | Out-Null }
+}
+
+# The start of a text, to tell "the loaded file, edited" from "something else pasted over it".
+function Get-ConvHead([string]$text) {
+    $t = ($text -replace '\s+', ' ').Trim()
+    return $t.Substring(0, [Math]::Min(40, $t.Length))
+}
+
+function Import-ConvFile([string]$file) {
+    $ext = [System.IO.Path]::GetExtension($file).ToLower()
+    $script:ConvLoading = $true
+    try { $TxtConvInput.Text = [System.IO.File]::ReadAllText($file) } finally { $script:ConvLoading = $false }
+    $script:ConvFile = $file
+    $script:ConvFileHead = Get-ConvHead $TxtConvInput.Text
+    $script:ConvKind = if ($ext -eq '.ps1') { 'ps1' } else { 'bat' }
+    $ConvSourceLabel.Text = "COMMANDS   (from $([System.IO.Path]::GetFileName($file)))"
+    $TxtConvRoot.Text = Get-ConvAppFolder $file
+    [void](Invoke-Convert)
+}
+
+function Invoke-Convert {
+    $root = $TxtConvRoot.Text.Trim().Trim('"').TrimEnd('\', '/')
+    $text = $TxtConvInput.Text
+    if (-not $text.Trim()) { $TxtConvNotes.Text = 'Paste the commands first, or load a command file.'; return $false }
+    if (-not $root -or -not (Test-Path -LiteralPath $root -PathType Container)) {
+        $TxtConvNotes.Text = 'Choose the app folder first (Browse). The recipe goes into its local-run folder, and relative paths start there.'
+        return $false
+    }
+    $scriptDir = if ($script:ConvFile) { Split-Path -Parent $script:ConvFile } else { $root }
+    $startDir = if ($script:ConvFile) { Get-RecipeRoot $script:ConvFile } else { $root }
+    $src = if ($script:ConvFile) { [System.IO.Path]::GetFileName($script:ConvFile) } else { '' }
+    try {
+        $r = Convert-CommandsToRecipe -Text $text -Kind $script:ConvKind -Root $root -ScriptDir $scriptDir -StartDir $startDir -SourceName $src
+    } catch {
+        Write-Log "Convert failed: $($_.Exception.Message)"
+        $TxtConvNotes.Text = "LocalRun could not read these commands: $($_.Exception.Message)`nTry 'Copy AI prompt' instead."
+        return $false
+    }
+    $TxtConvOutput.Text = $r.Json
+    $TxtConvOutput.ScrollToHome()
+    $notes = @($r.Notes)
+    $TxtConvNotes.Text = if ($notes.Count -eq 0) { 'Every command was recognised. Check the ports, then save.' } else { ($notes | ForEach-Object { "- $_" }) -join "`n" }
+    $TxtConvNotes.Foreground = Get-Brush $(if ($r.Complex -or $r.Services -eq 0) { '#FF8FA3' } elseif ($notes.Count -gt 0) { '#FFD49A' } else { '#7FF0BE' })
+    if ($r.Complex -or $r.Services -eq 0) { Show-Toast "Part of this could not be converted. 'Copy AI prompt' gives an exact version." 'info' }
+    else { Show-Toast "Draft ready: $($r.Services) service$(if ($r.Services -ne 1) { 's' })" }
+    return $true
+}
+
+function Get-ConvertPrompt {
+    if ($GuideTopics.Count -eq 0) { Initialize-Guide }
+    $spec = ($GuideTopics | Where-Object { $_.Kind -eq 'doc' } | Select-Object -First 1).Code
+    $root = $TxtConvRoot.Text.Trim()
+    $listing = ''
+    if ($root -and (Test-Path -LiteralPath $root -PathType Container)) {
+        $listing = (@(Get-ChildItem -LiteralPath $root -Force -ErrorAction SilentlyContinue | Select-Object -First 60 | ForEach-Object { if ($_.PSIsContainer) { "$($_.Name)/" } else { $_.Name } }) -join "`n")
+    }
+    $what = if ($script:ConvFile) { "the start script $([System.IO.Path]::GetFileName($script:ConvFile)) (it lives in $(Split-Path -Parent $script:ConvFile))" } else { 'the commands below, which a developer types in separate terminals (a blank line separates terminals)' }
+    return @"
+Convert $what into a LocalRun recipe that does exactly the same thing. It will be saved as
+local-run/startapp.json inside the app folder $root, so relative paths start from that folder.
+Follow the format below exactly. Answer with the JSON only, no explanation.
+Keep every check, setup step and service. Turn the script's logic into recipe fields: tests that
+stop the script become checks with a fix; work done only when needed becomes a setup step with
+"when"; things started only when their port is free become "shared" services; things the script
+can live without become "optional"; one-off work that needs a running service becomes a service
+with "ready": { "exit": true }; script switches or parameters become profiles.
+Make it human-readable: 2-space indentation, one field per line, every object and array opened
+over several lines, a "name" on every check, step and service. Use forward slashes in paths and
+give every server a port.
+
+=== THE RECIPE FORMAT ===
+$spec
+
+=== THE APP FOLDER (top level) ===
+$listing
+
+=== THE COMMANDS ===
+$($TxtConvInput.Text)
+
+=== LOCALRUN'S OWN DRAFT (automatic, may be incomplete) ===
+$($TxtConvOutput.Text)
+"@
+}
+
+function Save-Converted {
+    $root = $TxtConvRoot.Text.Trim().Trim('"').TrimEnd('\', '/')
+    if (-not $TxtConvOutput.Text.Trim()) { if (-not (Invoke-Convert)) { return } }
+    if (-not $root -or -not (Test-Path -LiteralPath $root -PathType Container)) { $TxtConvNotes.Text = 'Choose the app folder first.'; return }
+    # Check the draft (it may have been edited, or be an AI's answer) exactly as a run would read it.
+    $tmp = Join-Path $env:TEMP "localrun-draft-$PID.json"
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($tmp, $TxtConvOutput.Text.TrimEnd() + "`r`n", $utf8)
+    $read = Read-Recipe $tmp
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    if ($read.Errors.Count -gt 0) {
+        $TxtConvNotes.Foreground = Get-Brush '#FF8FA3'
+        $TxtConvNotes.Text = "The draft needs fixing before it can be saved:`n- " + (@($read.Errors) -join "`n- ")
+        Show-Toast 'The draft is not a valid recipe yet' 'error'
+        return
+    }
+    $dir = Join-Path $root $script:RecipeFolder
+    $file = Join-Path $dir $script:RecipeFile
+    if (Test-Path -LiteralPath $file) {
+        $ans = [System.Windows.MessageBox]::Show("$file already exists.`n`nReplace it with this draft?", 'LocalRun', 'YesNo', 'Warning', 'No')
+        if ($ans -ne 'Yes') { return }
+    }
+    try {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        [System.IO.File]::WriteAllText($file, $TxtConvOutput.Text.TrimEnd() + "`r`n", $utf8)
+    } catch {
+        Show-Toast "Could not save: $($_.Exception.Message)" 'error'
+        return
+    }
+    Write-Log "Converted $(if ($script:ConvFile) { $script:ConvFile } else { 'pasted commands' }) -> $file"
+    # A project that ran the converted command file switches to the recipe (after Save changes).
+    $existing = $null
+    if ($script:ConvFile) { $existing = $script:Projects | Where-Object { $_.Path -ieq $script:ConvFile } | Select-Object -First 1 }
+    if ($existing) {
+        Show-Editor $existing
+        $TxtPath.Text = $file
+        Show-Toast "Saved. Press Save changes to run '$($existing.Title)' from the recipe."
+    } else {
+        Show-Editor $null $file
+        Show-Toast "Saved $($script:RecipeFolder)\$($script:RecipeFile). Add it as a project."
+    }
 }
 
 # ---------------------------------------------------------------- logs
@@ -1716,6 +1934,58 @@ $BtnGuideCreate.Add_Click({
     $TxtTitle.Text = Split-Path -Leaf $dlg.SelectedPath
 })
 $BtnGuideClose.Add_Click({ Close-Overlay })
+
+$BtnConvert.Add_Click({ Show-Converter })
+# From the project dialog: convert the command file it points at, if it points at one.
+$LnkEditorConvert.Add_Click({
+    $path = $TxtPath.Text.Trim().Trim('"')
+    $ext = if ($path) { [System.IO.Path]::GetExtension($path).ToLower() } else { '' }
+    if (@('.bat', '.cmd', '.ps1') -contains $ext -and (Test-Path -LiteralPath $path -PathType Leaf)) { Show-Converter $path } else { Show-Converter }
+})
+$LnkConvLoad.Add_Click({
+    $dlg = New-Object Microsoft.Win32.OpenFileDialog
+    $dlg.Title = 'Choose the command file that starts the app'
+    $dlg.Filter = 'Command files (*.bat;*.cmd;*.ps1)|*.bat;*.cmd;*.ps1|Text (*.txt;*.md)|*.txt;*.md|All files (*.*)|*.*'
+    $root = $TxtConvRoot.Text.Trim()
+    if ($root -and (Test-Path -LiteralPath $root -PathType Container)) { $dlg.InitialDirectory = $root }
+    if (-not $dlg.ShowDialog($window)) { return }
+    if (@('.bat', '.cmd', '.ps1') -contains [System.IO.Path]::GetExtension($dlg.FileName).ToLower()) { Import-ConvFile $dlg.FileName }
+    else {
+        # a text file of commands (a README section, notes) is read like a paste
+        $TxtConvInput.Text = [System.IO.File]::ReadAllText($dlg.FileName)
+        if (-not $TxtConvRoot.Text.Trim()) { $TxtConvRoot.Text = Get-ConvAppFolder $dlg.FileName }
+        [void](Invoke-Convert)
+    }
+})
+$BtnConvRoot.Add_Click({
+    Add-Type -AssemblyName System.Windows.Forms
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "Choose the app folder. The recipe is saved as $($script:RecipeFolder)\$($script:RecipeFile) inside it."
+    $dlg.ShowNewFolderButton = $false
+    $cur = $TxtConvRoot.Text.Trim()
+    if ($cur -and (Test-Path -LiteralPath $cur -PathType Container)) { $dlg.SelectedPath = $cur }
+    if ($dlg.ShowDialog() -eq 'OK') {
+        $TxtConvRoot.Text = $dlg.SelectedPath
+        if ($TxtConvInput.Text.Trim()) { [void](Invoke-Convert) }
+    }
+})
+$TxtConvInput.Add_TextChanged({
+    $ConvHint.Visibility = if ($TxtConvInput.Text) { 'Collapsed' } else { 'Visible' }
+    # emptied, or other commands pasted over the loaded file: it is a paste now
+    if (-not $script:ConvLoading -and $script:ConvFile -and (Get-ConvHead $TxtConvInput.Text) -ne $script:ConvFileHead) {
+        $script:ConvFile = ''
+        $script:ConvKind = 'paste'
+        $ConvSourceLabel.Text = 'COMMANDS   (pasted)'
+    }
+})
+$BtnConvRun.Add_Click({ [void](Invoke-Convert) })
+$BtnConvSave.Add_Click({ Save-Converted })
+$BtnConvClose.Add_Click({ Close-Overlay })
+$BtnConvPrompt.Add_Click({
+    if (-not $TxtConvInput.Text.Trim()) { Show-Toast 'Paste the commands or load a command file first' 'info'; return }
+    [System.Windows.Clipboard]::SetText((Get-ConvertPrompt))
+    Show-Toast "Prompt copied. Paste the AI's answer into the draft, then save."
+})
 $LogsList.Add_SelectionChanged({ Update-LogsView -Force })
 $BtnLogsFolder.Add_Click({
     $dir = Join-Path $script:EngineLogRoot $script:LogsProjectId
@@ -1794,7 +2064,7 @@ $window.Add_PreviewKeyDown({
     param($s, $e)
     if ($script:OverlayOpen) {
         if ($e.Key -eq 'Escape') { Close-Overlay; $e.Handled = $true }
-        elseif ($e.Key -eq 'Return') {
+        elseif ($e.Key -eq 'Return' -and $ConvertPanel.Visibility -ne 'Visible') {
             if ($EditPanel.Visibility -eq 'Visible') { Save-Editor }
             elseif ($ConfirmPanel.Visibility -eq 'Visible') { Confirm-Delete }
             else { Close-Overlay }

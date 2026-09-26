@@ -17,9 +17,10 @@ if ((Get-Content -LiteralPath (Join-Path $Root 'LocalRun.ps1') -Raw) -notmatch '
 $Version = $Matches[1]
 $FileVersion = (($Version -split '\.') + @('0', '0', '0', '0'))[0..3] -join '.'
 
-# The recipe engine, its rules (shown in the in-app guide), the JSON schema and the templates.
+# The recipe engine, the converter, the rules (shown in the in-app guide), the JSON schema and the templates.
 function Copy-RecipeFiles($dest) {
     Copy-Item -LiteralPath (Join-Path $Root 'engine.ps1') -Destination $dest
+    Copy-Item -LiteralPath (Join-Path $Root 'converter.ps1') -Destination $dest
     New-Item -ItemType Directory -Path (Join-Path $dest 'docs') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $Root 'docs\recipe-format.md') -Destination (Join-Path $dest 'docs')
     foreach ($dir in 'schema', 'templates') {
