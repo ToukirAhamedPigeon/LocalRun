@@ -27,6 +27,7 @@ $files = @{
     'LocalRun.bat'           = 'LocalRun.bat'
     'README.md'              = 'README.md'
     'TERMS.md'               = 'TERMS.md'
+    'LICENSE'                = 'LICENSE'
     'assets\logo.png'        = 'assets\logo.png'
     'assets\localrun.ico'    = 'assets\localrun.ico'
     'installer\Uninstall.ps1' = 'Uninstall.ps1'
@@ -58,7 +59,7 @@ $zip = Join-Path $Dist "LocalRun-$Version.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 $portable = Join-Path $Work 'portable\LocalRun'
 New-Item -ItemType Directory -Path (Join-Path $portable 'assets') -Force | Out-Null
-foreach ($f in 'LocalRun.ps1', 'LocalRun.vbs', 'LocalRun.bat', 'Install.ps1', 'README.md', 'TERMS.md', 'assets\logo.png', 'assets\localrun.ico') {
+foreach ($f in 'LocalRun.ps1', 'LocalRun.vbs', 'LocalRun.bat', 'Install.ps1', 'README.md', 'TERMS.md', 'LICENSE', 'assets\logo.png', 'assets\localrun.ico') {
     Copy-Item -LiteralPath (Join-Path $Root $f) -Destination (Join-Path $portable $f)
 }
 [System.IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $Work 'portable'), $zip, 'Optimal', $false)

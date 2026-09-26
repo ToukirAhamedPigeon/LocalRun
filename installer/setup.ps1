@@ -421,15 +421,15 @@ $Xaml = @'
         <Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
-          <TextBlock Style="{StaticResource Title}" Text="Terms and Conditions"/>
-          <TextBlock Style="{StaticResource Sub}" Text="Please read the terms below. You need to accept them to install LocalRun."/>
+          <TextBlock Style="{StaticResource Title}" Text="License and Terms"/>
+          <TextBlock Style="{StaticResource Sub}" Text="LocalRun is free, open-source software (MIT License). Please read the license and terms below and accept them to continue."/>
         </StackPanel>
         <Border Grid.Row="1" Margin="0,16,0,14" CornerRadius="12" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
           <ScrollViewer x:Name="TermsScroll" VerticalScrollBarVisibility="Auto" Margin="4" Padding="14,10,10,10">
             <TextBlock x:Name="TermsText" TextWrapping="Wrap" FontSize="12.5" Foreground="#CFCAF0" LineHeight="19"/>
           </ScrollViewer>
         </Border>
-        <CheckBox x:Name="AcceptBox" Grid.Row="2" Style="{StaticResource Check}" Content="I have read and accept the Terms and Conditions"/>
+        <CheckBox x:Name="AcceptBox" Grid.Row="2" Style="{StaticResource Check}" Content="I have read and accept the license and terms"/>
       </Grid>
 
       <!-- 2: options -->
@@ -454,7 +454,7 @@ $Xaml = @'
           <CheckBox x:Name="ChkStart" Style="{StaticResource Check}" Content="Add LocalRun to the Start menu" IsChecked="True" Margin="0,12,0,0"/>
           <Border Margin="0,24,0,0" Padding="14,10" CornerRadius="10" Background="#10FFFFFF">
             <TextBlock FontSize="12.5" Foreground="#9D97C4" TextWrapping="Wrap"
-                       Text="No administrator rights needed. Your saved projects are kept separately in %APPDATA%\LocalRun, so they survive updates and reinstalls."/>
+                       Text="Setup will copy LocalRun into this folder, create the shortcuts you tick, and add LocalRun to Settings &gt; Apps so you can uninstall it there. Nothing else is changed, and no administrator rights are needed. Your saved projects live separately in %APPDATA%\LocalRun and survive updates and reinstalls."/>
           </Border>
         </StackPanel>
       </Grid>
@@ -515,7 +515,7 @@ foreach ($n in 'HeaderLogo','VersionText','BtnClose','P0','P1','P2','P3','P4','W
     Set-Variable -Name $n -Value $window.FindName($n) -Scope Script
 }
 $Pages = @($P0, $P1, $P2, $P3, $P4)
-$StepNames = @('Welcome', 'Terms and Conditions', 'Install options', 'Installing', 'Finished')
+$StepNames = @('Welcome', 'License and Terms', 'Install options', 'Installing', 'Finished')
 
 $P_Opacity = [System.Windows.UIElement]::OpacityProperty
 $P_X       = [System.Windows.Media.TranslateTransform]::XProperty

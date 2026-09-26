@@ -2,7 +2,10 @@
 
 <img src="assets/logo.png" width="64" align="right" alt="LocalRun logo">
 
-A small Windows desktop app that starts your local projects with one click.
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/ToukirAhamedPigeon/LocalRun)](https://github.com/ToukirAhamedPigeon/LocalRun/releases/latest)
+
+A small, free and open-source Windows desktop app that starts your local projects with one click.
 
 Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own folder: the script that brings up the app and all its dependencies on localhost. LocalRun is the one place that lists those commands and runs them.
 
@@ -17,6 +20,9 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 - [Code map](#code-map)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
+- [Privacy](#privacy)
+- [Code signing policy](#code-signing-policy)
+- [License](#license)
 
 ---
 
@@ -32,13 +38,13 @@ Each project keeps its own run command (`.bat`, `.cmd` or `.ps1`) inside its own
 
 ### Install (recommended)
 1. Download **`LocalRun-Setup-<version>.exe`** from the [latest release](https://github.com/ToukirAhamedPigeon/LocalRun/releases/latest).
-2. Run it and follow the wizard: Welcome → **Terms and Conditions** (you must accept them) → install folder and shortcuts → Install → Finish.
+2. Run it and follow the wizard: Welcome → **License and Terms** (you must accept them) → install folder and shortcuts → Install → Finish.
 3. Start LocalRun from the Desktop or the Start menu.
 
 - Installs per user to `%LOCALAPPDATA%\Programs\LocalRun`. **No administrator rights needed.**
 - Running the setup of a newer version updates an existing install in place. Your saved projects are never touched.
 - Uninstall from **Settings → Apps → Installed apps → LocalRun**. You choose whether to keep your saved projects.
-- Unattended install: `LocalRun-Setup-<version>.exe -Quiet [-InstallDir <folder>]`. Using `-Quiet` means you accept the [Terms](TERMS.md).
+- Unattended install: `LocalRun-Setup-<version>.exe -Quiet [-InstallDir <folder>]`. Using `-Quiet` means you accept the [license and terms](TERMS.md).
 
 > **"Windows protected your PC"?** The installer is not code-signed, so Microsoft Defender SmartScreen warns about it the first time. Click **More info → Run anyway**.
 
@@ -121,8 +127,11 @@ LocalRun/
 ├── LocalRun.vbs        # hidden-window launcher (normal entry point)
 ├── LocalRun.bat        # fallback launcher where .vbs is blocked
 ├── Install.ps1         # portable use: creates Desktop + Start Menu shortcuts on this PC
-├── TERMS.md            # Terms and Conditions, shown and accepted in the installer
+├── LICENSE             # MIT License
+├── TERMS.md            # license + privacy + terms, shown and accepted in the installer
 ├── .gitignore          # guards against database / log / build files ever being committed
+├── .github/workflows/
+│   └── build.yml       # CI: builds the installer from source on every tag, signs it via SignPath
 ├── assets/
 │   ├── logo.png        # app logo (title bar, empty state, window icon)
 │   └── localrun.ico    # multi-size icon for shortcuts and the setup .exe
@@ -247,3 +256,27 @@ Consoles stay open (`/k`, `-NoExit`) so logs remain visible and `Ctrl+C` still w
 - Running state lives in memory. If you close and reopen LocalRun, projects that are still running show as *Ready*, and their consoles have to be closed by hand.
 - A script that ends with `exit` closes its console, so the project shows as stopped even if it started background services.
 - Only consoles that LocalRun launches are tracked. Other file types open through their Windows association.
+
+## Privacy
+This program will not transfer any information to other networked systems unless specifically requested by the user.
+
+- Your project list is stored only on your computer, in `%APPDATA%\LocalRun`.
+- LocalRun has no telemetry, analytics, update checks or accounts.
+- The social icons in the footer and the About dialog open a page in your web browser only when you click them.
+
+## Code signing policy
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Release binaries (`LocalRun-Setup-<version>.exe`) are built from this repository by [GitHub Actions](.github/workflows/build.yml) on every version tag, and signed only through that pipeline.
+
+**Team roles**
+| Role | Members |
+|---|---|
+| Committers and reviewers | [Toukir Ahamed Pigeon](https://github.com/ToukirAhamedPigeon) |
+| Approvers | [Toukir Ahamed Pigeon](https://github.com/ToukirAhamedPigeon) |
+
+All team members use multi-factor authentication for GitHub and SignPath.
+
+## License
+LocalRun is free and open-source software, released under the [MIT License](LICENSE).
+Copyright © 2026 Pigeonic - Toukir Ahamed Pigeon.

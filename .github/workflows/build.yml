@@ -1,0 +1,68 @@
+# Builds the installer and portable zip from source on every version tag (and on demand),
+# signs them through SignPath once the project is set up there, and attaches them to the release.
+#
+# Signing turns on by itself when these exist in the repo settings (Settings > Secrets and variables > Actions):
+#   variable  SIGNPATH_ORGANIZATION_ID
+#   secret    SIGNPATH_API_TOKEN
+# Until then the workflow still builds and publishes unsigned files.
+name: build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build installer and portable zip
+        shell: powershell
+        run: .\installer\build.ps1
+
+      - name: Upload unsigned build
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: localrun-unsigned
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+          organization-id: '${{ vars.SIGNPATH_ORGANIZATION_ID }}'
+          project-slug: 'LocalRun'
+          signing-policy-slug: 'release-signing'
+          github-artifact-id: '${{ steps.upload-unsigned.outputs.artifact-id }}'
+          wait-for-completion: true
+          output-artifact-directory: 'signed'
+
+      - name: Upload signed build
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: localrun-signed
+          path: signed/*
+          if-no-files-found: error
+
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = if (Test-Path signed) { 'signed' } else { 'dist' }
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME --draft --title "LocalRun $env:GITHUB_REF_NAME" --generate-notes
+          }
+          gh release upload $env:GITHUB_REF_NAME (Get-ChildItem $dir -File).FullName --clobber

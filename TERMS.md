@@ -1,31 +1,23 @@
-LocalRun - Terms and Conditions
-Version 1.0, effective 26 September 2026
+LocalRun - License and Terms
+LocalRun is free, open-source software released under the MIT License.
 
-These terms are an agreement between you and Pigeonic ("we", "us") about the LocalRun software ("the Software"). By installing or using the Software you accept these terms. If you do not accept them, do not install or use the Software.
+1. License (MIT)
+Copyright (c) 2026 Pigeonic - Toukir Ahamed Pigeon
 
-1. Licence
-Pigeonic grants you a free, non-exclusive, non-transferable licence to install and use the Software on any number of computers that you own or control, for personal or business use.
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-2. Restrictions
-You may not sell, rent or sublicense the Software, or remove or change its copyright notices or branding, without Pigeonic's written permission.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-3. What the Software does
-LocalRun starts command files (.bat, .cmd and .ps1) that you choose. These commands run on your computer with your own user account's permissions. You are responsible for the commands you add to LocalRun and for everything they do. Only add command files that you trust.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-4. Your data
-The Software stores your project list only on your own computer, in %APPDATA%\LocalRun. It does not collect, send or share any personal data or usage data. The social icons in the app only open pages in your web browser.
+2. Privacy
+This program will not transfer any information to other networked systems unless specifically requested by the user. Your project list is stored only on this computer, in %APPDATA%\LocalRun. The social icons in the app open a page in your web browser only when you click them.
 
-5. No warranty
-The Software is provided "as is" and "as available", without warranty of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose and non-infringement.
+3. Commands you run
+LocalRun starts the command files you add (.bat, .cmd and .ps1) with your own user account's permissions. You are responsible for these commands and for what they do. Only add command files that you trust.
 
-6. Limitation of liability
-To the maximum extent permitted by law, Pigeonic is not liable for any direct, indirect, incidental or consequential damages arising from the use of, or inability to use, the Software, including loss of data, loss of profit or interruption of work.
+4. What Setup changes on this computer
+Setup copies LocalRun into the folder you choose, creates the shortcuts you select, and registers LocalRun in Settings > Apps so that it can be uninstalled from there. It does not need administrator rights and changes nothing else.
 
-7. Updates and changes
-Pigeonic may release updates to the Software and may change these terms. The terms shown when you install a version apply to that version.
-
-8. Ownership
-The Software is copyright (c) 2026 Pigeonic. All rights not expressly granted in these terms are reserved.
-
-9. Ending the licence
-You can stop using the Software at any time by uninstalling it. This licence ends automatically if you break these terms.
+5. Uninstalling
+Uninstall LocalRun from Settings > Apps > Installed apps. The uninstaller removes the app, its shortcuts and its Apps entry, and asks whether to keep or delete your saved projects.

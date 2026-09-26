@@ -22,6 +22,7 @@ $Links = @{
     Facebook = 'https://www.facebook.com/ta.pigeon'
     Mail     = 'https://mail.google.com/mail/?view=cm&fs=1&to=toukir.ahamed.pigeon@gmail.com'
     Web      = 'https://pigeonic.com'
+    License  = 'https://github.com/ToukirAhamedPigeon/LocalRun/blob/main/LICENSE'
 }
 
 $script:Projects    = New-Object System.Collections.ArrayList
@@ -558,7 +559,7 @@ $WindowXaml = @'
       <Grid>
         <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#7D77A6">
           <Run x:Name="FooterCopy" Text="&#xA9; 2026"/>
-          <Hyperlink x:Name="LnkFooterCompany" Style="{StaticResource Link}">Pigeonic</Hyperlink><Run Text=". All rights reserved.   &#xB7;   Developed by "/><Hyperlink x:Name="LnkFooterDev" Style="{StaticResource Link}">Pigeonic</Hyperlink>
+          <Hyperlink x:Name="LnkFooterCompany" Style="{StaticResource Link}">Pigeonic</Hyperlink><Run Text=". MIT License.   &#xB7;   Developed by "/><Hyperlink x:Name="LnkFooterDev" Style="{StaticResource Link}">Pigeonic</Hyperlink>
         </TextBlock>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Button x:Name="FLinkedIn" Style="{StaticResource SocialBtn}" BorderBrush="#0A66C2" ToolTip="LinkedIn">
@@ -638,7 +639,7 @@ $WindowXaml = @'
             <Border Background="#10FFFFFF" CornerRadius="12" Padding="18,14">
               <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <TextBlock Text="DEVELOPER" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" Text="Toukir Ahamed Pigeon" FontSize="14" FontWeight="SemiBold"/>
                 <TextBlock Grid.Row="1" Text="COMPANY" Style="{StaticResource FieldLabel}" Margin="0,12,0,0" VerticalAlignment="Center"/>
@@ -647,6 +648,10 @@ $WindowXaml = @'
                 </TextBlock>
                 <TextBlock Grid.Row="2" Text="PLATFORM" Style="{StaticResource FieldLabel}" Margin="0,12,0,0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Row="2" Grid.Column="1" Text="Windows 10 / 11   &#xB7;   PowerShell 5.1 + WPF" FontSize="13" Foreground="#B9B3E0" Margin="0,12,0,0"/>
+                <TextBlock Grid.Row="3" Text="LICENSE" Style="{StaticResource FieldLabel}" Margin="0,12,0,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" FontSize="13" Margin="0,12,0,0">
+                  <Hyperlink x:Name="LnkInfoLicense" Style="{StaticResource Link}">MIT License</Hyperlink><Run Text="   &#xB7;   free and open source" Foreground="#B9B3E0"/>
+                </TextBlock>
               </Grid>
             </Border>
             <Grid Margin="0,22,0,0">
@@ -1217,7 +1222,7 @@ function Open-Link($url) {
 $year = (Get-Date).Year
 $span = if ($year -gt 2026) { "2026$([char]0x2013)$year" } else { '2026' }
 $FooterCopy.Text = "$([char]0x00A9) $span"
-$InfoCopy.Text = "$([char]0x00A9) $span Pigeonic. All rights reserved."
+$InfoCopy.Text = "$([char]0x00A9) $span Pigeonic. Free and open source under the MIT License."
 $InfoVersion.Text = "Version $AppVersion"
 
 foreach ($prefix in 'F', 'I') {
@@ -1232,6 +1237,9 @@ foreach ($n in 'LnkFooterCompany', 'LnkFooterDev', 'LnkInfoCompany') {
     $h.Tag = $Links.Web
     $h.Add_Click({ Open-Link $this.Tag })
 }
+$LnkInfoLicense = $window.FindName('LnkInfoLicense')
+$LnkInfoLicense.Tag = $Links.License
+$LnkInfoLicense.Add_Click({ Open-Link $this.Tag })
 $BtnInfo.Add_Click({ Open-Overlay $InfoPanel })
 $BtnInfoClose.Add_Click({ Close-Overlay })
 $Overlay.Add_MouseLeftButtonDown({ param($s, $e) if ($e.OriginalSource -eq $Overlay) { Close-Overlay } })
